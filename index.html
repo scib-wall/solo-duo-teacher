@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solo or Duo? — Teacher Host Screen</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- PeerJS Fallback for Instant Local/Demo Mode -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+  <!-- Bubbly Classroom Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@700;800;900&display=swap" rel="stylesheet" />
+
+  <style>
+    body {
+      font-family: 'Nunito', sans-serif;
+      background: linear-gradient(180deg, #38bdf8 0%, #bae6fd 42%, #fef08a 100%);
+      min-height: 100vh;
+      overflow-x: hidden;
+      color: #0f172a;
+      user-select: none;
+    }
+
+    h1, h2, h3, .font-bubbly {
+      font-family: 'Fredoka', cursive, sans-serif;
+    }
+
+    @keyframes cloudDrift {
+      0%, 100% { transform: translateX(0px) translateY(0px); }
+      50% { transform: translateX(22px) translateY(-6px); }
+    }
+
+    @keyframes popSpring {
+      0% { opacity: 0; transform: scale(0.75) translateY(16px); }
+      70% { opacity: 1; transform: scale(1.05) translateY(-3px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    @keyframes avatarFloat {
+      0%, 100% { transform: translate(-50%, -50%) translateY(0px) rotate(-2deg); }
+      50% { transform: translate(-50%, -50%) translateY(-7px) rotate(2deg); }
+    }
+
+    @keyframes tetherDash {
+      to { stroke-dashoffset: -28; }
+    }
+
+    @keyframes pulseUrgent {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.09); }
+    }
+
+    .animate-cloud { animation: cloudDrift 8s ease-in-out infinite; }
+    .animate-pop { animation: popSpring 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+    .animate-urgent { animation: pulseUrgent 0.55s ease-in-out infinite; }
+
+    /* 3D Glossy Toy Buttons */
+    .btn-toy-green {
+      background: linear-gradient(180deg, #4ade80 0%, #16a34a 100%);
+      box-shadow: 0 6px 0 #14532d, 0 12px 24px rgba(22, 163, 74, 0.35);
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .btn-toy-green:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 0 #14532d, 0 16px 28px rgba(22, 163, 74, 0.45);
+    }
+    .btn-toy-green:active:not(:disabled) {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 #14532d;
+    }
+
+    .btn-toy-amber {
+      background: linear-gradient(180deg, #fde047 0%, #f59e0b 100%);
+      box-shadow: 0 6px 0 #92400e, 0 12px 24px rgba(245, 158, 11, 0.35);
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .btn-toy-amber:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 0 #92400e, 0 16px 28px rgba(245, 158, 11, 0.45);
+    }
+    .btn-toy-amber:active:not(:disabled) {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 #92400e;
+    }
+
+    .btn-toy-purple {
+      background: linear-gradient(180deg, #c084fc 0%, #7e22ce 100%);
+      box-shadow: 0 6px 0 #4c1d95, 0 12px 24px rgba(126, 34, 206, 0.35);
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .btn-toy-purple:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 0 #4c1d95, 0 16px 28px rgba(126, 34, 206, 0.45);
+    }
+    .btn-toy-purple:active:not(:disabled) {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 #4c1d95;
+    }
+
+    /* Sunny Classroom Meadow Pool */
+    .classroom-pool {
+      background:
+        radial-gradient(circle at 20% 25%, rgba(255, 255, 255, 0.75) 0%, transparent 28%),
+        radial-gradient(circle at 82% 20%, rgba(255, 255, 255, 0.65) 0%, transparent 25%),
+        linear-gradient(180deg, #e0f2fe 0%, #dcfce7 36%, #86efac 100%);
+      border: 5px solid #ffffff;
+      box-shadow: 0 18px 36px -12px rgba(15, 23, 42, 0.2), inset 0 3px 14px rgba(255, 255, 255, 0.85);
+    }
+
+    .pool-avatar-node {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      transition: left 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+      animation: avatarFloat 3s ease-in-out infinite;
+      z-index: 20;
+    }
+
+    .tether-line {
+      stroke-dasharray: 10 5;
+      animation: tetherDash 0.65s linear infinite;
+    }
+
+    #confetti-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 60;
+    }
+  </style>
+</head>
+<body class="flex flex-col justify-between relative">
+
+  <!-- Sky Clouds -->
+  <div class="pointer-events-none fixed inset-0 overflow-hidden z-0 opacity-80">
+    <div class="animate-cloud absolute top-6 left-8 text-6xl">☁️</div>
+    <div class="animate-cloud absolute top-14 right-14 text-5xl" style="animation-delay: 2s;">☁️</div>
+    <div class="animate-cloud absolute bottom-12 left-10 text-5xl" style="animation-delay: 4s;">🌼</div>
+    <div class="animate-cloud absolute bottom-10 right-12 text-5xl" style="animation-delay: 1.5s;">🌻</div>
+  </div>
+
+  <!-- Confetti Canvas -->
+  <canvas id="confetti-canvas"></canvas>
+
+  <!-- Toast Banner -->
+  <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl text-sm font-extrabold flex items-center gap-2 opacity-0 pointer-events-none transition-all duration-300 translate-y-3">
+    <span id="toast-icon">✨</span>
+    <span id="toast-msg">Copied!</span>
+  </div>
+
+  <!-- Top Screen-Share Header Bar -->
+  <header class="relative z-20 w-full max-w-7xl mx-auto px-4 pt-3 pb-2 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex items-center gap-3 bg-white/95 px-4 py-2 rounded-3xl border-4 border-white shadow-md">
+      <span class="text-3xl">🎈</span>
+      <div>
+        <h1 class="font-bubbly text-xl sm:text-2xl font-bold text-slate-800 leading-none">
+          <span class="text-sky-500">Solo</span> or <span class="text-amber-500">Duo</span>?
+        </h1>
+        <div class="text-[11px] font-extrabold text-indigo-600 uppercase tracking-wider">Teacher Screen-Share Host</div>
+      </div>
+    </div>
+
+    <!-- Room Code & Copy Student Link Controls -->
+    <div class="flex flex-wrap items-center gap-2.5">
+      <div id="host-status-pill" class="bg-white/95 border-2 border-emerald-300 px-3.5 py-2 rounded-2xl shadow-sm flex items-center gap-2 text-xs font-extrabold text-emerald-800">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+        <span id="host-status-text">Room Live</span>
+      </div>
+
+      <div class="bg-indigo-600 text-white px-4 py-1.5 rounded-2xl shadow-md flex items-center gap-2.5 border-2 border-indigo-400">
+        <span class="text-[11px] font-extrabold uppercase tracking-widest text-indigo-200">Code</span>
+        <span id="room-code-display" class="font-bubbly text-2xl font-bold tracking-[0.2em]">----</span>
+      </div>
+
+      <button onclick="copyStudentLink()" class="btn-toy-amber px-4 py-2.5 rounded-2xl text-slate-900 font-bubbly font-bold text-sm sm:text-base flex items-center gap-1.5 cursor-pointer">
+        <span>🔗</span>
+        <span>Copy Student Link</span>
+      </button>
+
+      <button onclick="toggleSound()" class="bg-white/95 hover:bg-white border-2 border-white px-3 py-2.5 rounded-2xl shadow-sm text-base cursor-pointer" title="Toggle Sound">
+        <span id="sound-icon">🔊</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Screen-Share Arena -->
+  <main class="relative z-10 flex-1 w-full max-w-7xl mx-auto px-4 py-2 flex flex-col justify-center">
+
+    <!-- =====================================================================
+         PHASE 1: LOBBY SCREEN (STUDENTS JOINING THE POOL)
+    ====================================================================== -->
+    <section id="view-lobby" class="animate-pop bg-white/95 backdrop-blur-md rounded-[2.2rem] border-4 border-white shadow-2xl p-6 sm:p-8">
+      <div class="flex flex-col lg:flex-row items-center justify-between gap-4 mb-5">
+        <div class="text-center lg:text-left">
+          <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-purple-100 text-purple-800 text-xs font-extrabold uppercase tracking-wider mb-1.5">
+            <span>📺</span> Share This Screen With Your Class
+          </div>
+          <h2 class="font-bubbly text-3xl sm:text-4xl font-bold text-slate-800">
+            Open the Student Link & Enter Code <span id="lobby-inline-code" class="text-indigo-600 underline decoration-wavy">----</span>
+          </h2>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-3">
+          <button onclick="addDemoBots()" class="px-4 py-3 rounded-2xl bg-sky-100 hover:bg-sky-200 border-2 border-sky-300 text-sky-900 font-bubbly font-bold text-sm cursor-pointer transition">
+            + Add 4 Demo Students
+          </button>
+
+          <button onclick="startGame()" class="btn-toy-green px-8 py-3.5 rounded-2xl text-white font-bubbly font-bold text-2xl cursor-pointer flex items-center gap-2">
+            <span>🚀</span> Start Round 1!
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Classroom Pool in Lobby -->
+      <div class="relative">
+        <div class="absolute top-3 left-4 z-30 bg-white/95 px-3.5 py-1 rounded-full border-2 border-emerald-200 text-xs font-extrabold text-emerald-800 shadow-xs">
+          👥 Students in Pool: <span id="lobby-count">0</span>
+        </div>
+
+        <div id="lobby-pool" class="classroom-pool relative w-full h-[310px] sm:h-[360px] rounded-[2rem] overflow-hidden flex items-center justify-center">
+          <div id="lobby-empty-banner" class="bg-white/90 px-6 py-4 rounded-3xl border-2 border-sky-200 shadow-md text-center max-w-md mx-4">
+            <div class="text-4xl mb-1">🎒</div>
+            <div class="font-bubbly text-xl font-bold text-slate-800">Waiting for students to hop in...</div>
+            <p class="text-xs font-bold text-slate-500 mt-1">
+              Click <strong>"Copy Student Link"</strong> above and paste it in your Zoom/Meet chat!
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         PHASE 2: ACTIVE GAMEPLAY (POOL + LIVE PARTNER TETHERS + CONTROLS)
+    ====================================================================== -->
+    <section id="view-gameplay" class="hidden flex-col gap-4">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+
+        <!-- LEFT / CENTER (8 Cols): Situation Card + Live Classroom Pool with Partner Tethers -->
+        <div class="lg:col-span-8 flex flex-col gap-3.5">
+
+          <!-- Top Situation & 5-Second Countdown Banner -->
+          <div class="bg-white/95 backdrop-blur rounded-[2rem] border-4 border-white shadow-xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-4 text-center sm:text-left">
+              <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-br from-sky-100 to-amber-100 border-2 border-white shadow-md flex items-center justify-center text-4xl sm:text-5xl shrink-0">
+                <span id="game-emoji">📄</span>
+              </div>
+              <div>
+                <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-1">
+                  <span id="game-round-pill" class="px-3 py-0.5 rounded-full bg-indigo-600 text-white font-bubbly font-bold text-xs">
+                    Round 1 of 6
+                  </span>
+                  <span id="game-cat-pill" class="px-3 py-0.5 rounded-full bg-amber-100 text-amber-800 font-extrabold text-xs uppercase">
+                    Warm-Up
+                  </span>
+                </div>
+                <h2 id="game-situation" class="font-bubbly text-2xl sm:text-3xl font-bold text-slate-800 leading-tight">
+                  Photocopying a worksheet
+                </h2>
+              </div>
+            </div>
+
+            <!-- Circular 5-Second Countdown Timer -->
+            <div class="flex items-center gap-3 shrink-0">
+              <div id="timer-ring-box" class="relative w-20 h-20 rounded-full bg-indigo-50 border-4 border-indigo-500 flex flex-col items-center justify-center shadow-inner">
+                <span class="text-[9px] font-extrabold uppercase tracking-wider text-indigo-500">Timer</span>
+                <span id="game-timer-num" class="font-bubbly text-3xl font-bold text-indigo-700 leading-none">5</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- LIVE CLASSROOM POOL (Shows Students & Animated Partner Lines!) -->
+          <div class="classroom-pool relative w-full h-[330px] sm:h-[380px] rounded-[2rem] overflow-hidden">
+            <!-- Live Solo vs Duo Counter Pill -->
+            <div class="absolute top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+              <div class="bg-white/95 px-3.5 py-1.5 rounded-2xl border-2 border-white shadow-sm text-xs font-extrabold flex items-center gap-3">
+                <span class="text-sky-600">🧍 Solo: <strong id="live-solo-count">0</strong></span>
+                <span class="text-slate-300">|</span>
+                <span class="text-amber-600">🤝 Paired Up: <strong id="live-duo-count">0</strong></span>
+              </div>
+
+              <div id="pool-status-banner" class="bg-indigo-600 text-white px-3.5 py-1.5 rounded-2xl shadow-sm text-xs font-extrabold uppercase tracking-wider">
+                ⚡ Students are pairing up!
+              </div>
+            </div>
+
+            <!-- SVG Layer for Live Glowing Partner Tethers -->
+            <svg id="pool-tether-svg" class="absolute inset-0 w-full h-full pointer-events-none z-10"></svg>
+
+            <!-- Scattered Student Avatars Layer -->
+            <div id="game-pool-avatars" class="absolute inset-0"></div>
+          </div>
+
+        </div>
+
+        <!-- RIGHT SIDEBAR (4 Cols): Teacher Controls + Reveal Card + Live Leaderboard -->
+        <div class="lg:col-span-4 flex flex-col gap-3.5 justify-between">
+
+          <!-- Teacher Action Control Panel -->
+          <div class="bg-white/95 backdrop-blur rounded-[2rem] border-4 border-white shadow-xl p-5">
+            <div class="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
+              <span>🎛️ Teacher Controls</span>
+              <span id="control-state-label" class="text-indigo-600">Timer Running...</span>
+            </div>
+
+            <!-- Reveal Answer & Next Round Buttons -->
+            <div class="grid grid-cols-1 gap-3">
+              <button id="btn-reveal" onclick="revealAnswer()" class="btn-toy-amber w-full py-3.5 px-5 rounded-2xl text-slate-900 font-bubbly font-bold text-xl cursor-pointer flex items-center justify-center gap-2">
+                <span>✨</span>
+                <span>Reveal Answer</span>
+              </button>
+
+              <button id="btn-next-round" onclick="nextRound()" disabled class="btn-toy-green disabled:opacity-45 disabled:cursor-not-allowed w-full py-3.5 px-5 rounded-2xl text-white font-bubbly font-bold text-xl cursor-pointer flex items-center justify-center gap-2">
+                <span id="btn-next-text">Next Round</span>
+                <span>➔</span>
+              </button>
+            </div>
+
+            <!-- Revealed Answer Box (Appears when Teacher clicks Reveal Answer) -->
+            <div id="reveal-card" class="hidden mt-4 rounded-2xl p-4 border-2 animate-pop">
+              <div id="reveal-answer-badge" class="inline-block px-3.5 py-1 rounded-full font-bubbly font-bold text-base text-white mb-2 shadow-xs">
+                🧍 ANSWER: SOLO
+              </div>
+              <p id="reveal-clue-text" class="font-bold text-slate-800 text-sm leading-snug">
+                1 sheet makes an exact copy!
+              </p>
+            </div>
+          </div>
+
+          <!-- Live Classroom Scoreboard -->
+          <div class="flex-1 bg-white/95 backdrop-blur rounded-[2rem] border-4 border-white shadow-xl p-5 flex flex-col">
+            <div class="flex items-center justify-between border-b-2 border-slate-100 pb-2.5 mb-3">
+              <h3 class="font-bubbly text-xl font-bold text-slate-800 flex items-center gap-1.5">
+                <span>🏆</span> Live Scores
+              </h3>
+              <span class="text-[11px] font-extrabold text-slate-400 uppercase">Leaderboard</span>
+            </div>
+
+            <div id="leaderboard-list" class="flex-1 space-y-2 overflow-y-auto max-h-[270px] pr-1">
+              <div class="text-center text-slate-400 font-bold text-sm py-6">
+                Waiting for players...
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         PHASE 3: FINAL PODIUM & "GUESS TODAY'S TOPIC!" PATTERN BOARD
+    ====================================================================== -->
+    <section id="view-finale" class="hidden animate-pop bg-white/95 backdrop-blur-md rounded-[2.2rem] border-4 border-white shadow-2xl p-6 sm:p-8">
+      <div class="text-center mb-5">
+        <div class="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-extrabold uppercase tracking-wider mb-1.5">
+          <span>🎉</span> Engage Complete! Detective Pattern Board
+        </div>
+        <h2 class="font-bubbly text-3xl sm:text-4xl font-bold text-slate-800">
+          Look at the Pattern — Can You Guess Today's Topic?
+        </h2>
+      </div>
+
+      <!-- Top 3 Student Podium -->
+      <div id="finale-podium" class="flex flex-wrap items-end justify-center gap-4 mb-6"></div>
+
+      <!-- Side-by-Side Clue Comparison (No Biology Jargon!) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div class="bg-sky-50 border-3 border-sky-200 rounded-3xl p-4 sm:p-5">
+          <div class="flex items-center justify-between border-b-2 border-sky-200 pb-2 mb-3">
+            <div>
+              <span class="text-[11px] font-extrabold uppercase tracking-wider text-sky-600">1 Original Source</span>
+              <h3 class="font-bubbly text-2xl font-bold text-sky-950">SOLO 🧍 (Exact Copies)</h3>
+            </div>
+            <span class="text-3xl">📄🥔⭐</span>
+          </div>
+          <ul id="finale-solo-list" class="space-y-2 text-sm font-extrabold text-sky-950"></ul>
+        </div>
+
+        <div class="bg-amber-50 border-3 border-amber-200 rounded-3xl p-4 sm:p-5">
+          <div class="flex items-center justify-between border-b-2 border-amber-200 pb-2 mb-3">
+            <div>
+              <span class="text-[11px] font-extrabold uppercase tracking-wider text-amber-600">2 Working Together</span>
+              <h3 class="font-bubbly text-2xl font-bold text-amber-950">DUO 🤝 (Unique Mixes)</h3>
+            </div>
+            <span class="text-3xl">🎨🐕🐝</span>
+          </div>
+          <ul id="finale-duo-list" class="space-y-2 text-sm font-extrabold text-amber-950"></ul>
+        </div>
+      </div>
+
+      <!-- Big Class Discussion Banner -->
+      <div class="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-3xl p-5 text-white flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-4 text-center sm:text-left">
+          <span class="text-5xl">🕵️‍♂️</span>
+          <div>
+            <div class="text-xs font-extrabold uppercase tracking-widest text-amber-300">Ask Your Class Now</div>
+            <div class="font-bubbly text-xl sm:text-2xl font-bold">
+              "Living things making new living things — what is today's science topic?"
+            </div>
+          </div>
+        </div>
+        <button onclick="resetGameToLobby()" class="btn-toy-amber px-6 py-3 rounded-2xl text-slate-900 font-bubbly font-bold text-lg shrink-0 cursor-pointer">
+          ↺ Play Again
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // =========================================================================
+    // CLOUD CONFIG (Configured for solo-duo)
+    // =========================================================================
+    const MANUAL_FIREBASE_CONFIG = {
+      apiKey: "AIzaSyBPOJoMchl2hOWJRrUXMDIzP0r281_Sx90",
+      authDomain: "solo-duo.firebaseapp.com",
+      projectId: "solo-duo",
+      storageBucket: "solo-duo.firebasestorage.app",
+      messagingSenderId: "558960426950",
+      appId: "1:558960426950:web:199b9c62b25862a81d3cc7",
+      measurementId: "G-L9WGR3N181"
+    };
+
+    const rawConfig = typeof __firebase_config !== "undefined"
+      ? JSON.parse(__firebase_config)
+      : MANUAL_FIREBASE_CONFIG;
+    const appId = typeof __app_id !== "undefined" ? __app_id : "solo-duo-classroom";
+    const hasCloudConfig = rawConfig && rawConfig.apiKey && !rawConfig.apiKey.startsWith("PASTE_");
+
+    let db = null;
+    let auth = null;
+    let cloudUser = null;
+
+    // =========================================================================
+    // 1. 6 HIGH-IMPACT ROUNDS (~3.5 MINS TOTAL, ZERO BIOLOGY JARGON)
+    // =========================================================================
+    const ROUNDS = [
+      {
+        round: 1,
+        category: "Warm-Up",
+        emoji: "📄",
+        situation: "Photocopying a worksheet",
+        answer: "SOLO",
+        clue: "1 sheet makes an exact copy all by itself!",
+        summary: "Photocopying a worksheet (1 sheet → exact copy)"
+      },
+      {
+        round: 2,
+        category: "Warm-Up",
+        emoji: "🎨",
+        situation: "Mixing red & blue paint",
+        answer: "DUO",
+        clue: "2 colors blend together into a brand-new shade!",
+        summary: "Mixing red & blue paint (2 colors → new purple)"
+      },
+      {
+        round: 3,
+        category: "Living Things",
+        emoji: "🥔",
+        situation: "One potato sprouting baby potatoes",
+        answer: "SOLO",
+        clue: "1 potato grows identical baby potatoes on its own!",
+        summary: "Potato sprouting baby potatoes (1 parent → identical)"
+      },
+      {
+        round: 4,
+        category: "Living Things",
+        emoji: "🐕",
+        situation: "Golden Retriever + Poodle = Goldendoodle",
+        answer: "DUO",
+        clue: "2 dogs combine traits to make a mixed puppy!",
+        summary: "Golden Retriever + Poodle puppy (2 parents → mix)"
+      },
+      {
+        round: 5,
+        category: "Living Things",
+        emoji: "⭐",
+        situation: "One starfish arm regrowing a whole starfish",
+        answer: "SOLO",
+        clue: "1 single piece regrows into an exact twin!",
+        summary: "Starfish arm regrowing (1 piece → exact twin)"
+      },
+      {
+        round: 6,
+        category: "Living Things",
+        emoji: "🐝",
+        situation: "Bee carrying pollen between two apple trees",
+        answer: "DUO",
+        clue: "2 different trees combine to make new apple seeds!",
+        summary: "Bee pollinating two apple trees (2 trees → seeds)"
+      }
+    ];
+
+    const POOL_POSITIONS = [
+      { x: 14, y: 28 }, { x: 32, y: 24 }, { x: 52, y: 26 }, { x: 72, y: 24 }, { x: 88, y: 30 },
+      { x: 12, y: 54 }, { x: 29, y: 52 }, { x: 48, y: 54 }, { x: 68, y: 52 }, { x: 86, y: 55 },
+      { x: 16, y: 78 }, { x: 35, y: 76 }, { x: 54, y: 78 }, { x: 73, y: 76 }, { x: 87, y: 79 },
+      { x: 22, y: 39 }, { x: 41, y: 39 }, { x: 60, y: 39 }, { x: 79, y: 40 }, { x: 44, y: 66 }
+    ];
+
+    const DEMO_BOTS = [
+      { id: "bot-1", name: "Maya", avatar: "🐼" },
+      { id: "bot-2", name: "Liam", avatar: "🦁" },
+      { id: "bot-3", name: "Chloe", avatar: "🦄" },
+      { id: "bot-4", name: "Noah", avatar: "🐸" }
+    ];
+
+    let state = {
+      roomCode: "",
+      useCloud: false,
+      peer: null,
+      connections: {},
+      bc: null,
+      unsubStudents: null,
+      soundOn: true,
+      phase: "lobby",
+      roundIndex: 0,
+      timer: 5,
+      timerHandle: null,
+      students: {}
+    };
+
+    // =========================================================================
+    // 2. SOUND EFFECTS (WEB AUDIO API)
+    // =========================================================================
+    let audioCtx = null;
+    function ensureAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) audioCtx = new AC();
+      }
+      if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    }
+
+    function playTone(type) {
+      if (!state.soundOn) return;
+      try {
+        ensureAudio();
+        if (!audioCtx) return;
+        const now = audioCtx.currentTime;
+
+        if (type === "join" || type === "pair") {
+          const o = audioCtx.createOscillator();
+          const g = audioCtx.createGain();
+          o.type = "sine";
+          o.connect(g);
+          g.connect(audioCtx.destination);
+          o.frequency.setValueAtTime(440, now);
+          o.frequency.exponentialRampToValueAtTime(820, now + 0.14);
+          g.gain.setValueAtTime(0.15, now);
+          g.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+          o.start(now);
+          o.stop(now + 0.18);
+        } else if (type === "tick") {
+          const o = audioCtx.createOscillator();
+          const g = audioCtx.createGain();
+          o.type = "triangle";
+          o.connect(g);
+          g.connect(audioCtx.destination);
+          o.frequency.setValueAtTime(640, now);
+          g.gain.setValueAtTime(0.11, now);
+          g.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+          o.start(now);
+          o.stop(now + 0.09);
+        } else if (type === "alarm") {
+          const o = audioCtx.createOscillator();
+          const g = audioCtx.createGain();
+          o.type = "sawtooth";
+          o.connect(g);
+          g.connect(audioCtx.destination);
+          o.frequency.setValueAtTime(360, now);
+          o.frequency.linearRampToValueAtTime(210, now + 0.36);
+          g.gain.setValueAtTime(0.14, now);
+          g.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+          o.start(now);
+          o.stop(now + 0.39);
+        } else if (type === "fanfare") {
+          [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = "triangle";
+            o.connect(g);
+            g.connect(audioCtx.destination);
+            o.frequency.setValueAtTime(freq, now + i * 0.08);
+            g.gain.setValueAtTime(0.16, now + i * 0.08);
+            g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.32);
+            o.start(now + i * 0.08);
+            o.stop(now + i * 0.08 + 0.34);
+          });
+        }
+      } catch (e) {}
+    }
+
+    window.toggleSound = function () {
+      state.soundOn = !state.soundOn;
+      document.getElementById("sound-icon").textContent = state.soundOn ? "🔊" : "🔇";
+      if (state.soundOn) playTone("join");
+    };
+
+    // =========================================================================
+    // 3. CLOUD + FALLBACK HOST INITIALIZATION
+    // =========================================================================
+    function generateCode() {
+      const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+      let out = "";
+      for (let i = 0; i < 4; i++) out += letters[Math.floor(Math.random() * letters.length)];
+      return out;
+    }
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      state.roomCode = generateCode();
+      document.getElementById("room-code-display").textContent = state.roomCode;
+      document.getElementById("lobby-inline-code").textContent = state.roomCode;
+
+      if (hasCloudConfig) {
+        try {
+          const fbApp = initializeApp(rawConfig);
+          db = getFirestore(fbApp);
+          auth = getAuth(fbApp);
+
+          if (typeof __initial_auth_token !== "undefined" && __initial_auth_token) {
+            const cred = await signInWithCustomToken(auth, __initial_auth_token);
+            cloudUser = cred.user;
+          } else {
+            const cred = await signInAnonymously(auth);
+            cloudUser = cred.user;
+          }
+
+          if (cloudUser) {
+            state.useCloud = true;
+            await initCloudRoom();
+            return;
+          }
+        } catch (err) {
+          console.warn("Cloud init fallback:", err);
+        }
+      }
+
+      initFallbackHostRoom();
+    });
+
+    async function initCloudRoom() {
+      if (!cloudUser) return;
+      document.getElementById("host-status-text").textContent = `Cloud Sync (${state.roomCode})`;
+
+      const roomRef = doc(db, "artifacts", appId, "public", "data", `room_${state.roomCode}`, "state");
+      await setDoc(roomRef, {
+        roomCode: state.roomCode,
+        phase: "lobby",
+        roundIndex: 0,
+        roundData: ROUNDS[0],
+        timer: 5,
+        updatedAt: Date.now()
+      });
+
+      const studentsCol = collection(db, "artifacts", appId, "public", "data", `players_${state.roomCode}`);
+      state.unsubStudents = onSnapshot(
+        studentsCol,
+        (snapshot) => {
+          let newJoin = false;
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            const existing = state.students[docSnap.id];
+            if (!existing) {
+              newJoin = true;
+              const idx = Object.keys(state.students).length % POOL_POSITIONS.length;
+              state.students[docSnap.id] = {
+                id: docSnap.id,
+                name: data.name || "Student",
+                avatar: data.avatar || "🦊",
+                pos: POOL_POSITIONS[idx],
+                score: data.score || 0,
+                choice: data.choice || "SOLO",
+                partnerId: data.partnerId || null,
+                partnerName: data.partnerName || null,
+                timeLeft: data.timeLeft || 0
+              };
+            } else {
+              existing.name = data.name || existing.name;
+              existing.avatar = data.avatar || existing.avatar;
+              existing.choice = data.choice || "SOLO";
+              existing.partnerId = data.partnerId || null;
+              existing.partnerName = data.partnerName || null;
+              existing.timeLeft = typeof data.timeLeft === "number" ? data.timeLeft : existing.timeLeft;
+              if (typeof data.score === "number") existing.score = data.score;
+            }
+          });
+
+          if (newJoin) playTone("join");
+          renderLobbyPool();
+          renderLeaderboard();
+          if (state.phase === "playing") renderGamePool();
+        },
+        (error) => {
+          console.error("Student listener error:", error);
+        }
+      );
+    }
+
+    async function syncCloudState(extraFields = {}) {
+      if (!state.useCloud || !cloudUser) return;
+      try {
+        const roomRef = doc(db, "artifacts", appId, "public", "data", `room_${state.roomCode}`, "state");
+        await setDoc(roomRef, {
+          roomCode: state.roomCode,
+          phase: state.phase,
+          roundIndex: state.roundIndex,
+          roundData: ROUNDS[state.roundIndex],
+          timer: state.timer,
+          updatedAt: Date.now(),
+          ...extraFields
+        }, { merge: true });
+      } catch (e) {
+        console.error("Cloud state sync error:", e);
+      }
+    }
+
+    function initFallbackHostRoom() {
+      document.getElementById("host-status-text").textContent = `Room ${state.roomCode} Ready`;
+
+      if ("BroadcastChannel" in window) {
+        state.bc = new BroadcastChannel(`solo-duo-chan-${state.roomCode}`);
+        state.bc.onmessage = (e) => handleIncoming(e.data, null);
+      }
+
+      try {
+        if (state.peer) {
+          try { state.peer.destroy(); } catch (e) {}
+        }
+
+        const hostPeerId = `solo-duo-host-${state.roomCode}`;
+        state.peer = new Peer(hostPeerId, {
+          debug: 0,
+          config: {
+            iceServers: [
+              { urls: "stun:stun.l.google.com:19302" },
+              { urls: "stun:stun1.l.google.com:19302" }
+            ]
+          }
+        });
+
+        state.peer.on("connection", (conn) => {
+          conn.on("open", () => {
+            state.connections[conn.peer] = conn;
+          });
+          conn.on("data", (data) => handleIncoming(data, conn));
+          conn.on("close", () => {
+            delete state.connections[conn.peer];
+          });
+        });
+
+        state.peer.on("error", () => {
+          document.getElementById("host-status-text").textContent = `Local Mode (${state.roomCode})`;
+        });
+      } catch (err) {
+        document.getElementById("host-status-text").textContent = `Local Mode (${state.roomCode})`;
+      }
+    }
+
+    function broadcast(payload) {
+      Object.values(state.connections).forEach((conn) => {
+        if (conn && conn.open) {
+          try { conn.send(payload); } catch (e) {}
+        }
+      });
+      if (state.bc) {
+        try { state.bc.postMessage(payload); } catch (e) {}
+      }
+    }
+
+    function getRosterList() {
+      return Object.values(state.students).map((s) => ({
+        id: s.id,
+        name: s.name,
+        avatar: s.avatar,
+        score: s.score
+      }));
+    }
+
+    function handleIncoming(msg, conn) {
+      if (!msg || !msg.type) return;
+
+      if (msg.type === "JOIN") {
+        const existing = state.students[msg.studentId];
+        const slotIndex = Object.keys(state.students).length % POOL_POSITIONS.length;
+        const pos = existing ? existing.pos : POOL_POSITIONS[slotIndex];
+
+        state.students[msg.studentId] = {
+          id: msg.studentId,
+          name: msg.name,
+          avatar: msg.avatar || "🦊",
+          pos,
+          score: existing ? existing.score : 0,
+          choice: "SOLO",
+          partnerId: null,
+          partnerName: null,
+          timeLeft: 0
+        };
+
+        playTone("join");
+        renderLobbyPool();
+        renderLeaderboard();
+        if (state.phase === "playing") renderGamePool();
+
+        const syncPacket = {
+          type: "STATE_SYNC",
+          phase: state.phase,
+          roundIndex: state.roundIndex,
+          roundData: ROUNDS[state.roundIndex],
+          timer: state.timer,
+          roster: getRosterList()
+        };
+
+        if (conn && conn.open) conn.send(syncPacket);
+        broadcast({ type: "ROSTER_SYNC", roster: getRosterList() });
+      }
+
+      if (msg.type === "PAIR_UPDATE") {
+        const stu = state.students[msg.studentId];
+        if (!stu || state.phase !== "playing") return;
+
+        stu.choice = msg.choice;
+        stu.partnerId = msg.partnerId || null;
+        stu.partnerName = msg.partnerName || null;
+        stu.timeLeft = typeof msg.timeLeft === "number" ? msg.timeLeft : state.timer;
+
+        if (stu.choice === "DUO") playTone("pair");
+        renderGamePool();
+      }
+    }
+
+    window.copyStudentLink = function () {
+      ensureAudio();
+      const url = new URL(window.location.href);
+      if (url.pathname.endsWith("teacher.html")) {
+        url.pathname = url.pathname.replace(/teacher\.html$/, "student.html");
+      } else if (url.pathname.endsWith("/")) {
+        url.pathname = url.pathname + "student.html";
+      } else {
+        url.pathname = url.pathname.substring(0, url.pathname.lastIndexOf("/") + 1) + "student.html";
+      }
+      url.searchParams.set("room", state.roomCode);
+
+      const linkStr = url.toString();
+      const ta = document.createElement("textarea");
+      ta.value = linkStr;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        showToast(`Copied Student Link for Room ${state.roomCode}!`, "🔗");
+      } catch (e) {
+        showToast(`Room Code: ${state.roomCode}`, "📋");
+      }
+      document.body.removeChild(ta);
+    };
+
+    function showToast(text, icon = "✨") {
+      const el = document.getElementById("toast");
+      document.getElementById("toast-msg").textContent = text;
+      document.getElementById("toast-icon").textContent = icon;
+      el.classList.remove("opacity-0", "translate-y-3");
+      el.classList.add("opacity-100", "translate-y-0");
+      setTimeout(() => {
+        el.classList.add("opacity-0", "translate-y-3");
+        el.classList.remove("opacity-100", "translate-y-0");
+      }, 2800);
+    }
+
+    window.addDemoBots = async function () {
+      ensureAudio();
+      for (const bot of DEMO_BOTS) {
+        if (!state.students[bot.id]) {
+          const idx = Object.keys(state.students).length % POOL_POSITIONS.length;
+          state.students[bot.id] = {
+            id: bot.id,
+            name: bot.name,
+            avatar: bot.avatar,
+            pos: POOL_POSITIONS[idx],
+            score: 0,
+            choice: "SOLO",
+            partnerId: null,
+            partnerName: null,
+            timeLeft: 3
+          };
+
+          if (state.useCloud && cloudUser) {
+            const pRef = doc(db, "artifacts", appId, "public", "data", `players_${state.roomCode}`, bot.id);
+            await setDoc(pRef, {
+              name: bot.name,
+              avatar: bot.avatar,
+              score: 0,
+              choice: "SOLO",
+              partnerId: null,
+              partnerName: null,
+              timeLeft: 3
+            });
+          }
+        }
+      }
+      playTone("join");
+      renderLobbyPool();
+      renderLeaderboard();
+      broadcast({ type: "ROSTER_SYNC", roster: getRosterList() });
+    };
+
+    // =========================================================================
+    // 4. LOBBY POOL RENDERING
+    // =========================================================================
+    function renderLobbyPool() {
+      const pool = document.getElementById("lobby-pool");
+      const list = Object.values(state.students);
+      document.getElementById("lobby-count").textContent = list.length;
+
+      if (list.length === 0) return;
+
+      const emptyBanner = document.getElementById("lobby-empty-banner");
+      if (emptyBanner) emptyBanner.classList.add("hidden");
+
+      pool.innerHTML = list.map((s, idx) => `
+        <div class="pool-avatar-node flex flex-col items-center" style="left: ${s.pos.x}%; top: ${s.pos.y}%; animation-delay: ${(idx * 0.25).toFixed(2)}s;">
+          <div class="animate-pop flex flex-col items-center">
+            <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-white border-4 border-sky-400 shadow-lg flex items-center justify-center text-4xl sm:text-5xl">
+              ${s.avatar}
+            </div>
+            <span class="mt-1 px-3 py-0.5 rounded-full bg-slate-900 text-white font-bubbly font-bold text-xs sm:text-sm shadow">
+              ${escapeHTML(s.name)}
+            </span>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    // =========================================================================
+    // 5. ACTIVE ROUND ENGINE & LIVE PARTNER TETHERS
+    // =========================================================================
+    window.startGame = function () {
+      ensureAudio();
+      state.roundIndex = 0;
+      document.getElementById("view-lobby").classList.add("hidden");
+      document.getElementById("view-finale").classList.add("hidden");
+      document.getElementById("view-gameplay").classList.remove("hidden");
+      document.getElementById("view-gameplay").classList.add("flex");
+      beginRound();
+    };
+
+    async function beginRound() {
+      clearInterval(state.timerHandle);
+      state.phase = "playing";
+      state.timer = 5;
+
+      const roundObj = ROUNDS[state.roundIndex];
+
+      const allIds = Object.keys(state.students);
+      for (const s of Object.values(state.students)) {
+        s.choice = "SOLO";
+        s.partnerId = null;
+        s.partnerName = null;
+        s.timeLeft = 0;
+
+        if (s.id.startsWith("bot-") && allIds.length > 1) {
+          const wantsDuo = Math.random() < 0.55;
+          if (wantsDuo) {
+            const candidates = allIds.filter((id) => id !== s.id);
+            const targetId = candidates[Math.floor(Math.random() * candidates.length)];
+            s.choice = "DUO";
+            s.partnerId = targetId;
+            s.partnerName = state.students[targetId].name;
+            s.timeLeft = Math.floor(Math.random() * 4) + 1;
+          } else {
+            s.timeLeft = Math.floor(Math.random() * 4) + 1;
+          }
+        }
+
+        if (state.useCloud && cloudUser) {
+          const pRef = doc(db, "artifacts", appId, "public", "data", `players_${state.roomCode}`, s.id);
+          await updateDoc(pRef, {
+            choice: s.choice,
+            partnerId: s.partnerId,
+            partnerName: s.partnerName,
+            timeLeft: s.timeLeft
+          }).catch(() => {});
+        }
+      }
+
+      document.getElementById("game-emoji").textContent = roundObj.emoji;
+      document.getElementById("game-round-pill").textContent = `Round ${roundObj.round} of ${ROUNDS.length}`;
+      const catPill = document.getElementById("game-cat-pill");
+      catPill.textContent = roundObj.category;
+      catPill.className = roundObj.category === "Warm-Up"
+        ? "px-3 py-0.5 rounded-full bg-amber-100 text-amber-800 font-extrabold text-xs uppercase"
+        : "px-3 py-0.5 rounded-full bg-purple-100 text-purple-800 font-extrabold text-xs uppercase";
+      document.getElementById("game-situation").textContent = roundObj.situation;
+
+      const timerNum = document.getElementById("game-timer-num");
+      const timerBox = document.getElementById("timer-ring-box");
+      timerNum.textContent = "5";
+      timerBox.className = "relative w-20 h-20 rounded-full bg-indigo-50 border-4 border-indigo-500 flex flex-col items-center justify-center shadow-inner animate-urgent";
+
+      document.getElementById("pool-status-banner").textContent = "⚡ Students are pairing up!";
+      document.getElementById("pool-status-banner").className = "bg-indigo-600 text-white px-3.5 py-1.5 rounded-2xl shadow-sm text-xs font-extrabold uppercase tracking-wider";
+
+      document.getElementById("control-state-label").textContent = "5s Countdown Active";
+      document.getElementById("reveal-card").classList.add("hidden");
+      document.getElementById("btn-next-round").disabled = true;
+
+      renderGamePool();
+      renderLeaderboard();
+      playTone("join");
+
+      await syncCloudState({ roundStartedAt: Date.now() });
+      broadcast({
+        type: "START_ROUND",
+        roundIndex: state.roundIndex,
+        roundData: roundObj,
+        timer: 5,
+        roster: getRosterList()
+      });
+
+      state.timerHandle = setInterval(async () => {
+        state.timer--;
+        if (state.timer > 0) {
+          timerNum.textContent = state.timer;
+          playTone("tick");
+        } else {
+          clearInterval(state.timerHandle);
+          state.timer = 0;
+          timerNum.textContent = "0";
+          timerBox.className = "relative w-20 h-20 rounded-full bg-rose-100 border-4 border-rose-500 flex flex-col items-center justify-center shadow-inner";
+          document.getElementById("pool-status-banner").textContent = "⏰ Time's Up! Click Reveal Answer!";
+          document.getElementById("pool-status-banner").className = "bg-rose-600 text-white px-3.5 py-1.5 rounded-2xl shadow-sm text-xs font-extrabold uppercase tracking-wider";
+          document.getElementById("control-state-label").textContent = "Ready to Reveal!";
+          playTone("alarm");
+
+          if (state.phase === "playing") {
+            state.phase = "timesup";
+            await syncCloudState();
+          }
+          broadcast({ type: "TIMES_UP" });
+        }
+      }, 1000);
+    }
+
+    function renderGamePool() {
+      const avatarsLayer = document.getElementById("game-pool-avatars");
+      const svgLayer = document.getElementById("pool-tether-svg");
+      const list = Object.values(state.students);
+
+      let soloCount = 0;
+      let duoCount = 0;
+      let svgMarkup = "";
+
+      list.forEach((s) => {
+        if (s.choice === "DUO" && s.partnerId && state.students[s.partnerId]) {
+          duoCount++;
+          const partner = state.students[s.partnerId];
+          svgMarkup += `
+            <line x1="${s.pos.x}%" y1="${s.pos.y}%" x2="${partner.pos.x}%" y2="${partner.pos.y}%"
+                  stroke="#ffffff" stroke-width="10" stroke-linecap="round" opacity="0.85" />
+            <line x1="${s.pos.x}%" y1="${s.pos.y}%" x2="${partner.pos.x}%" y2="${partner.pos.y}%"
+                  stroke="#f59e0b" stroke-width="5" stroke-linecap="round" class="tether-line" />
+          `;
+        } else {
+          soloCount++;
+        }
+      });
+
+      document.getElementById("live-solo-count").textContent = soloCount;
+      document.getElementById("live-duo-count").textContent = duoCount;
+      svgLayer.innerHTML = svgMarkup;
+
+      avatarsLayer.innerHTML = list.map((s, idx) => {
+        const isDuo = s.choice === "DUO" && s.partnerName;
+        const ringClass = isDuo ? "border-amber-400 bg-amber-50" : "border-sky-400 bg-white";
+        const badgeHTML = isDuo
+          ? `<span class="mb-1 px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-extrabold shadow border border-white whitespace-nowrap">🤝 + ${escapeHTML(s.partnerName)}</span>`
+          : `<span class="mb-1 px-2 py-0.5 rounded-full bg-sky-500 text-white text-[10px] font-extrabold shadow border border-white">🧍 SOLO</span>`;
+
+        return `
+          <div class="pool-avatar-node flex flex-col items-center" style="left: ${s.pos.x}%; top: ${s.pos.y}%; animation-delay: ${(idx * 0.22).toFixed(2)}s;">
+            ${badgeHTML}
+            <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-3xl ${ringClass} border-4 shadow-md flex items-center justify-center text-3xl sm:text-4xl">
+              ${s.avatar}
+            </div>
+            <span class="mt-1 px-2.5 py-0.5 rounded-full bg-slate-900 text-white font-bubbly font-bold text-xs shadow">
+              ${escapeHTML(s.name)}
+            </span>
+          </div>
+        `;
+      }).join("");
+    }
+
+    window.revealAnswer = async function () {
+      if (state.phase === "revealed") return;
+      clearInterval(state.timerHandle);
+      state.phase = "revealed";
+      playTone("fanfare");
+      launchConfetti(75);
+
+      const roundObj = ROUNDS[state.roundIndex];
+      const outcomes = {};
+
+      for (const s of Object.values(state.students)) {
+        const chosen = s.choice === "DUO" ? "DUO" : "SOLO";
+        const correct = chosen === roundObj.answer;
+        const gained = correct ? (100 + Math.round((s.timeLeft || 0) * 10)) : 0;
+        s.score += gained;
+
+        outcomes[s.id] = {
+          chosen,
+          partnerName: s.partnerName,
+          correct,
+          gained,
+          totalScore: s.score
+        };
+      }
+
+      const sorted = Object.values(state.students).sort((a, b) => b.score - a.score);
+      sorted.forEach((s, i) => {
+        if (outcomes[s.id]) outcomes[s.id].rank = i + 1;
+      });
+
+      // Persist updated scores to Firestore if in cloud mode
+      if (state.useCloud && cloudUser) {
+        for (const s of sorted) {
+          const out = outcomes[s.id];
+          const pRef = doc(db, "artifacts", appId, "public", "data", `players_${state.roomCode}`, s.id);
+          await updateDoc(pRef, {
+            score: s.score,
+            lastGained: out.gained,
+            lastCorrect: out.correct,
+            rank: out.rank
+          }).catch(() => {});
+        }
+        await syncCloudState();
+      }
+
+      const revealCard = document.getElementById("reveal-card");
+      const badge = document.getElementById("reveal-answer-badge");
+      revealCard.classList.remove("hidden");
+
+      if (roundObj.answer === "SOLO") {
+        revealCard.className = "mt-4 rounded-2xl p-4 border-2 border-sky-300 bg-sky-50 animate-pop";
+        badge.className = "inline-block px-3.5 py-1 rounded-full font-bubbly font-bold text-base text-white bg-sky-500 mb-2 shadow-xs";
+        badge.textContent = "🧍 ANSWER: SOLO!";
+      } else {
+        revealCard.className = "mt-4 rounded-2xl p-4 border-2 border-amber-300 bg-amber-50 animate-pop";
+        badge.className = "inline-block px-3.5 py-1 rounded-full font-bubbly font-bold text-base text-white bg-amber-500 mb-2 shadow-xs";
+        badge.textContent = "🤝 ANSWER: DUO!";
+      }
+
+      document.getElementById("reveal-clue-text").textContent = roundObj.clue;
+      document.getElementById("control-state-label").textContent = "Answer Revealed!";
+      document.getElementById("btn-next-round").disabled = false;
+      document.getElementById("btn-next-text").textContent =
+        state.roundIndex === ROUNDS.length - 1 ? "Final Podium & Pattern Board" : "Next Round";
+
+      renderLeaderboard();
+
+      broadcast({
+        type: "REVEAL",
+        roundData: roundObj,
+        outcomes
+      });
+    };
+
+    function renderLeaderboard() {
+      const el = document.getElementById("leaderboard-list");
+      const sorted = Object.values(state.students).sort((a, b) => b.score - a.score);
+
+      if (sorted.length === 0) {
+        el.innerHTML = `<div class="text-center text-slate-400 font-bold text-sm py-6">Waiting for players...</div>`;
+        return;
+      }
+
+      el.innerHTML = sorted.map((s, idx) => {
+        const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`;
+        return `
+          <div class="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-2xl px-3.5 py-2">
+            <div class="flex items-center gap-2.5">
+              <span class="font-bubbly font-bold text-base w-6 text-center">${medal}</span>
+              <span class="text-2xl">${s.avatar}</span>
+              <span class="font-bubbly font-bold text-slate-800 text-sm">${escapeHTML(s.name)}</span>
+            </div>
+            <span class="font-bubbly font-bold text-indigo-700 text-base">${s.score} pts</span>
+          </div>
+        `;
+      }).join("");
+    }
+
+    window.nextRound = function () {
+      if (state.roundIndex < ROUNDS.length - 1) {
+        state.roundIndex++;
+        beginRound();
+      } else {
+        showFinale();
+      }
+    };
+
+    // =========================================================================
+    // 6. FINALE PODIUM & PATTERN BOARD
+    // =========================================================================
+    async function showFinale() {
+      state.phase = "finale";
+      playTone("fanfare");
+      launchConfetti(130);
+
+      document.getElementById("view-gameplay").classList.add("hidden");
+      document.getElementById("view-gameplay").classList.remove("flex");
+      document.getElementById("view-finale").classList.remove("hidden");
+
+      const sorted = Object.values(state.students).sort((a, b) => b.score - a.score);
+      const podium = document.getElementById("finale-podium");
+
+      if (sorted.length === 0) {
+        podium.innerHTML = `
+          <div class="px-5 py-2.5 rounded-2xl bg-amber-50 border-2 border-amber-200 text-amber-900 font-bold text-sm">
+            Compare the SOLO vs. DUO pattern columns below with your class!
+          </div>
+        `;
+      } else {
+        podium.innerHTML = sorted.slice(0, 3).map((s, i) => {
+          const title = i === 0 ? "🥇 1st Place" : i === 1 ? "🥈 2nd Place" : "🥉 3rd Place";
+          const bg = i === 0 ? "bg-amber-100 border-amber-400 scale-105" : "bg-slate-50 border-slate-200";
+          return `
+            <div class="rounded-3xl border-3 ${bg} px-6 py-4 text-center shadow-md min-w-[150px]">
+              <div class="text-xs font-extrabold uppercase tracking-wider text-slate-600 mb-1">${title}</div>
+              <div class="text-5xl mb-1">${s.avatar}</div>
+              <div class="font-bubbly font-bold text-lg text-slate-800">${escapeHTML(s.name)}</div>
+              <div class="font-bubbly font-bold text-indigo-600 text-base">${s.score} pts</div>
+            </div>
+          `;
+        }).join("");
+      }
+
+      const soloList = document.getElementById("finale-solo-list");
+      const duoList = document.getElementById("finale-duo-list");
+      soloList.innerHTML = "";
+      duoList.innerHTML = "";
+
+      ROUNDS.forEach((r) => {
+        const li = document.createElement("li");
+        li.className = "flex items-center gap-2.5 bg-white px-3.5 py-2 rounded-2xl border border-slate-100 shadow-2xs";
+        li.innerHTML = `<span class="text-xl">${r.emoji}</span><span>${r.summary}</span>`;
+        if (r.answer === "SOLO") soloList.appendChild(li);
+        else duoList.appendChild(li);
+      });
+
+      const standings = {};
+      sorted.forEach((s, idx) => {
+        standings[s.id] = { rank: idx + 1, score: s.score };
+      });
+
+      await syncCloudState();
+      broadcast({ type: "GAME_OVER", standings });
+    }
+
+    window.resetGameToLobby = async function () {
+      state.phase = "lobby";
+      state.roundIndex = 0;
+      for (const s of Object.values(state.students)) {
+        s.score = 0;
+        s.choice = "SOLO";
+        s.partnerId = null;
+        s.partnerName = null;
+        if (state.useCloud && cloudUser) {
+          const pRef = doc(db, "artifacts", appId, "public", "data", `players_${state.roomCode}`, s.id);
+          await updateDoc(pRef, {
+            score: 0,
+            choice: "SOLO",
+            partnerId: null,
+            partnerName: null,
+            rank: 1
+          }).catch(() => {});
+        }
+      }
+
+      document.getElementById("view-finale").classList.add("hidden");
+      document.getElementById("view-lobby").classList.remove("hidden");
+      renderLobbyPool();
+      renderLeaderboard();
+      await syncCloudState();
+      broadcast({ type: "RETURN_LOBBY" });
+    };
+
+    // =========================================================================
+    // 7. UTILITIES & CONFETTI
+    // =========================================================================
+    function escapeHTML(str) {
+      return String(str).replace(/[&<>"']/g, (m) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[m]));
+    }
+
+    let confettiAnim = null;
+    function launchConfetti(count = 80) {
+      const canvas = document.getElementById("confetti-canvas");
+      const ctx = canvas.getContext("2d");
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      const palette = ["#38bdf8", "#facc15", "#4ade80", "#f472b6", "#a855f7", "#fb7185"];
+      const bits = Array.from({ length: count }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height * 0.35 - canvas.height * 0.25,
+        size: Math.random() * 10 + 6,
+        color: palette[Math.floor(Math.random() * palette.length)],
+        vx: Math.random() * 4 - 2,
+        vy: Math.random() * 3.5 + 2.5,
+        angle: Math.random() * 360,
+        spin: Math.random() * 8 - 4
+      }));
+
+      let frame = 0;
+      function draw() {
+        frame++;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        bits.forEach((b) => {
+          b.x += b.vx;
+          b.y += b.vy;
+          b.angle += b.spin;
+          ctx.save();
+          ctx.translate(b.x, b.y);
+          ctx.rotate((b.angle * Math.PI) / 180);
+          ctx.fillStyle = b.color;
+          ctx.globalAlpha = Math.max(0, 1 - frame / 135);
+          ctx.fillRect(-b.size / 2, -b.size / 2, b.size, b.size * 0.65);
+          ctx.restore();
+        });
+        if (frame < 135) confettiAnim = requestAnimationFrame(draw);
+        else ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      cancelAnimationFrame(confettiAnim);
+      draw();
+    }
+  </script>
+</body>
+</html>
