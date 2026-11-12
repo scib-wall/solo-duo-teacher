@@ -592,99 +592,78 @@
       state.unsubStudents = onSnapshot(
         studentsCol,
         (snapshot) => {
-          let newJoin = false;
-          const activeIds = new Set();
+          try {
+            let newJoin = false;
+            const activeIds = new Set();
 
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-            if (data.online === false) return;
-            activeIds.add(docSnap.id);
+            snapshot.forEach((docSnap) => {
+              const data = docSnap.data();
+              if (!data || data.online === false) return;
+              activeIds.add(docSnap.id);
 
-            const existing = state.students[docSnap.id];
-            if (!existing) {
-              newJoin = true;
-              const { slotIdx, pos } = pickFreePoolPosition();
-              state.students[docSnap.id] = {
-                id: docSnap.id,
-                name: data.name || "Student",
-                avatar: data.avatar || "🦊",
-                slotIdx,
-                pos,
-                score: data.score || 0,
-                choice: data.choice || "SOLO",
-                partnerId: data.partnerId || null,
-                partnerName: data.partnerName || null,
-                timeLeft: data.timeLeft || 0
-              };
-            } else {
-              existing.name = data.name || existing.name;
-              existing.avatar = data.avatar || existing.avatar;
-              existing.choice = data.choice || "SOLO";
-              existing.partnerId = data.partnerId || null;
-              existing.partnerName = data.partnerName || null;
-              existing.timeLeft = typeof data.timeLeft === "number" ? data.timeLeft : existing.timeLeft;
-              if (typeof data.score === "number") existing.score = data.score;
+              const existing = state.students[docSnap.id];
+              if (!existing) {
+                newJoin = true;
+                const { slotIdx, pos } = pickFreePoolPosition();
+                state.students[docSnap.id] = {
+                  id: docSnap.id,
+                  name: data.name || "Student",
+                  avatar: data.avatar || "🦊",
+                  slotIdx,
+                  pos,
+                  score: data.score || 0,
+                  choice: data.choice || "SOLO",
+                  partnerId: data.partnerId || null,
+                  partnerName: data.partnerName || null,
+                  timeLeft: data.timeLeft || 0
+                };
+              } else {
+                existing.name = data.name || existing.name;
+                existing.avatar = data.avatar || existing.avatar;
+                existing.choice = data.choice || "SOLO";
+                existing.partnerId = data.partnerId || null;
+                existing.partnerName = data.partnerName || null;
+                existing.timeLeft = data.timeLeft || 0;
+              }
+            });
+
+            // Remove students who exited
+            for (const id of Object.keys(state.students)) {
+              if (!activeIds.has(id)) {
+                delete state.students[id];
+              }
             }
-          });
 
-          // Remove any student who exited or closed their browser
-          for (const id of Object.keys(state.students)) {
-            if (!activeIds.has(id)) {
-              delete state.students[id];
+            // Clear stale partner tethers or mismatched 1-way links
+            for (const s of Object.values(state.students)) {
+              if (s.partnerId) {
+                const partner = state.students[s.partnerId];
+                if (!partner || (partner.partnerId && partner.partnerId !== s.id)) {
+                  s.choice = "SOLO";
+                  s.partnerId = null;
+                  s.partnerName = null;
+                }
+              }
             }
+
+            if (newJoin) playTone("join");
+            renderPoolAndStats();
+          } catch (snapErr) {
+            console.warn("Teacher student snapshot error:", snapErr);
           }
-
-          // Clear stale partner tethers if partner left
-          for (const s of Object.values(state.students)) {
-            if (s.partnerId && !state.students[s.partnerId]) {
-              s.choice = "SOLO";
-              s.partnerId = null;
-              s.partnerName = null;
-            }
-          }
-
-          if (newJoin) playTone("join");
-          renderLobbyPool();
-          renderLeaderboard();
-          if (state.phase === "playing" || state.phase === "timesup") renderGamePool();
         },
-        (error) => {
-          console.error("Student listener error:", error);
-        }
+        (err) => console.error("Firestore students listener error:", err)
       );
-    }
-
-    async function syncCloudState(extraFields = {}) {
-      if (!state.useCloud || !cloudUser) return;
-      try {
-        const roomRef = doc(db, "artifacts", appId, "public", "data", `room_${state.roomCode}`, "state");
-        await setDoc(roomRef, {
-          roomCode: state.roomCode,
-          phase: state.phase,
-          roundIndex: state.roundIndex,
-          roundData: ROUNDS[state.roundIndex],
-          timer: state.timer,
-          updatedAt: Date.now(),
-          ...extraFields
-        }, { merge: true });
-      } catch (e) {
-        console.error("Cloud state sync error:", e);
-      }
     }
 
     function initFallbackHostRoom() {
       if ("BroadcastChannel" in window) {
         state.bc = new BroadcastChannel(`solo-duo-chan-${state.roomCode}`);
-        state.bc.onmessage = (e) => handleIncoming(e.data, null);
+        state.bc.onmessage = (ev) => handleFallbackMessage(ev.data, null);
       }
 
       try {
-        if (state.peer) {
-          try { state.peer.destroy(); } catch (e) {}
-        }
-
-        const hostPeerId = `solo-duo-host-${state.roomCode}`;
-        state.peer = new Peer(hostPeerId, {
+        state.peer = new Peer(`solo-duo-host-${state.roomCode}`, {
           debug: 0,
           config: {
             iceServers: [
@@ -693,240 +672,350 @@
             ]
           }
         });
-
         state.peer.on("connection", (conn) => {
-          conn.on("open", () => {
-            state.connections[conn.peer] = conn;
-          });
-          conn.on("data", (data) => handleIncoming(data, conn));
-          conn.on("close", () => {
-            if (conn._studentId) removeStudent(conn._studentId);
-            delete state.connections[conn.peer];
-          });
+          conn.on("open", () => { state.connections[conn.peer] = conn; });
+          conn.on("data", (data) => handleFallbackMessage(data, conn));
+          conn.on("close", () => { delete state.connections[conn.peer]; });
         });
-      } catch (err) {}
+      } catch (e) {}
     }
 
-    function removeStudent(studentId) {
-      if (!studentId || !state.students[studentId]) return;
-      delete state.students[studentId];
-
-      for (const s of Object.values(state.students)) {
-        if (s.partnerId === studentId) {
-          s.choice = "SOLO";
-          s.partnerId = null;
-          s.partnerName = null;
-        }
-      }
-
-      renderLobbyPool();
-      renderLeaderboard();
-      if (state.phase === "playing" || state.phase === "timesup") renderGamePool();
-      broadcast({ type: "ROSTER_SYNC", roster: getRosterList() });
-    }
-
-    function broadcast(payload) {
-      Object.values(state.connections).forEach((conn) => {
-        if (conn && conn.open) {
-          try { conn.send(payload); } catch (e) {}
+    function broadcastFallback(msg) {
+      Object.values(state.connections).forEach((c) => {
+        if (c && c.open) {
+          try { c.send(msg); } catch (e) {}
         }
       });
       if (state.bc) {
-        try { state.bc.postMessage(payload); } catch (e) {}
+        try { state.bc.postMessage(msg); } catch (e) {}
       }
     }
 
-    function getRosterList() {
-      return Object.values(state.students).map((s) => ({
-        id: s.id,
-        name: s.name,
-        avatar: s.avatar,
-        score: s.score
-      }));
-    }
-
-    function handleIncoming(msg, conn) {
+    function handleFallbackMessage(msg, conn) {
       if (!msg || !msg.type) return;
 
       if (msg.type === "JOIN") {
-        if (conn) conn._studentId = msg.studentId;
-        const existing = state.students[msg.studentId];
-        const slotInfo = existing ? { slotIdx: existing.slotIdx, pos: existing.pos } : pickFreePoolPosition();
-
+        const { slotIdx, pos } = pickFreePoolPosition();
         state.students[msg.studentId] = {
           id: msg.studentId,
           name: msg.name,
-          avatar: msg.avatar || "🦊",
-          slotIdx: slotInfo.slotIdx,
-          pos: slotInfo.pos,
-          score: existing ? existing.score : 0,
+          avatar: msg.avatar,
+          slotIdx,
+          pos,
+          score: 0,
           choice: "SOLO",
           partnerId: null,
           partnerName: null,
           timeLeft: 0
         };
-
         playTone("join");
-        renderLobbyPool();
-        renderLeaderboard();
-        if (state.phase === "playing") renderGamePool();
+        renderPoolAndStats();
 
-        const syncPacket = {
+        const roster = Object.values(state.students).map((s) => ({
+          id: s.id,
+          name: s.name,
+          avatar: s.avatar,
+          choice: s.choice,
+          partnerId: s.partnerId,
+          partnerName: s.partnerName
+        }));
+        const syncMsg = {
           type: "STATE_SYNC",
           phase: state.phase,
-          roundIndex: state.roundIndex,
           roundData: ROUNDS[state.roundIndex],
           timer: state.timer,
-          roster: getRosterList()
+          roster
         };
-
-        if (conn && conn.open) conn.send(syncPacket);
-        broadcast({ type: "ROSTER_SYNC", roster: getRosterList() });
+        if (conn && conn.open) conn.send(syncMsg);
+        broadcastFallback({ type: "ROSTER_SYNC", roster });
       }
 
       if (msg.type === "LEAVE") {
-        removeStudent(msg.studentId);
+        const departing = state.students[msg.studentId];
+        if (departing && departing.partnerId && state.students[departing.partnerId]) {
+          const exPartner = state.students[departing.partnerId];
+          exPartner.choice = "SOLO";
+          exPartner.partnerId = null;
+          exPartner.partnerName = null;
+        }
+        delete state.students[msg.studentId];
+        renderPoolAndStats();
+        const roster = Object.values(state.students).map((s) => ({
+          id: s.id,
+          name: s.name,
+          avatar: s.avatar,
+          choice: s.choice,
+          partnerId: s.partnerId,
+          partnerName: s.partnerName
+        }));
+        broadcastFallback({ type: "ROSTER_SYNC", roster });
       }
 
       if (msg.type === "PAIR_UPDATE") {
-        const stu = state.students[msg.studentId];
-        if (!stu || state.phase !== "playing") return;
+        const st = state.students[msg.studentId];
+        if (!st || state.phase !== "playing") return;
 
-        // Release old partner if student switched or unpaired
-        if (msg.prevPartnerId && state.students[msg.prevPartnerId] && msg.prevPartnerId !== msg.partnerId) {
-          const oldP = state.students[msg.prevPartnerId];
+        // Release old partner if switching or unpairing
+        if (st.partnerId && st.partnerId !== msg.partnerId && state.students[st.partnerId]) {
+          const oldP = state.students[st.partnerId];
           oldP.choice = "SOLO";
           oldP.partnerId = null;
           oldP.partnerName = null;
-          notifyStudentPartnerChange(oldP.id, null, null);
         }
 
-        stu.choice = msg.choice;
-        stu.partnerId = msg.partnerId || null;
-        stu.partnerName = msg.partnerName || null;
-        stu.timeLeft = typeof msg.timeLeft === "number" ? msg.timeLeft : state.timer;
+        st.choice = msg.choice;
+        st.partnerId = msg.partnerId || null;
+        st.partnerName = msg.partnerName || null;
+        st.timeLeft = msg.timeLeft || 0;
 
-        // Two-way pair: also link the chosen partner back to this student
-        if (stu.choice === "DUO" && stu.partnerId && state.students[stu.partnerId]) {
-          const target = state.students[stu.partnerId];
-          if (target.partnerId && target.partnerId !== stu.id && state.students[target.partnerId]) {
-            const displaced = state.students[target.partnerId];
+        // Two-way link new partner (and free their previous partner if any)
+        if (msg.partnerId && state.students[msg.partnerId]) {
+          const newP = state.students[msg.partnerId];
+          if (newP.partnerId && newP.partnerId !== st.id && state.students[newP.partnerId]) {
+            const displaced = state.students[newP.partnerId];
             displaced.choice = "SOLO";
             displaced.partnerId = null;
             displaced.partnerName = null;
-            notifyStudentPartnerChange(displaced.id, null, null);
           }
-          target.choice = "DUO";
-          target.partnerId = stu.id;
-          target.partnerName = stu.name;
-          target.timeLeft = stu.timeLeft;
-          notifyStudentPartnerChange(target.id, stu.id, stu.name);
+          newP.choice = "DUO";
+          newP.partnerId = st.id;
+          newP.partnerName = st.name;
+          newP.timeLeft = msg.timeLeft || 0;
         }
 
-        if (stu.choice === "DUO") playTone("pair");
-        renderGamePool();
+        if (msg.choice === "DUO") playTone("pair");
+        renderPoolAndStats();
+
+        const roster = Object.values(state.students).map((s) => ({
+          id: s.id,
+          name: s.name,
+          avatar: s.avatar,
+          choice: s.choice,
+          partnerId: s.partnerId,
+          partnerName: s.partnerName
+        }));
+        broadcastFallback({ type: "ROSTER_SYNC", roster });
       }
     }
 
-    function notifyStudentPartnerChange(targetStudentId, partnerId, partnerName) {
-      const payload = {
-        type: "PARTNER_CHANGED",
-        targetStudentId,
-        partnerId,
-        partnerName
-      };
-      Object.values(state.connections).forEach((conn) => {
-        if (conn && conn.open && conn._studentId === targetStudentId) {
-          try { conn.send(payload); } catch (e) {}
-        }
-      });
-      if (state.bc) {
-        try { state.bc.postMessage(payload); } catch (e) {}
+    async function syncRoomPhase(extra = {}) {
+      const roundObj = ROUNDS[state.roundIndex];
+      if (state.useCloud && cloudUser) {
+        const roomRef = doc(db, "artifacts", appId, "public", "data", `room_${state.roomCode}`, "state");
+        await updateDoc(roomRef, {
+          phase: state.phase,
+          roundIndex: state.roundIndex,
+          roundData: roundObj,
+          timer: state.timer,
+          updatedAt: Date.now(),
+          ...extra
+        }).catch(() => {});
       }
     }
 
+    // =========================================================================
+    // COPY STUDENT LINK
+    // =========================================================================
     window.copyStudentLink = function () {
-      ensureAudio();
-      const url = new URL(window.location.href);
-      if (url.pathname.endsWith("teacher.html")) {
-        url.pathname = url.pathname.replace(/teacher\.html$/, "student.html");
-      } else if (url.pathname.endsWith("/")) {
-        url.pathname = url.pathname + "student.html";
-      } else {
-        url.pathname = url.pathname.substring(0, url.pathname.lastIndexOf("/") + 1) + "student.html";
-      }
-      url.searchParams.set("room", state.roomCode);
+      const base = window.location.href.substring(0, window.location.href.lastIndexOf("/") + 1);
+      const studentUrl = `${base}student.html?room=${state.roomCode}`;
 
-      const linkStr = url.toString();
       const ta = document.createElement("textarea");
-      ta.value = linkStr;
+      ta.value = studentUrl;
       ta.style.position = "fixed";
       ta.style.opacity = "0";
       document.body.appendChild(ta);
       ta.select();
       try {
         document.execCommand("copy");
-        showToast(`Copied Link (${state.roomCode})!`, "🔗");
+        showToast(`Link copied! (Code: ${state.roomCode})`, "🔗");
       } catch (e) {
-        showToast(`Code: ${state.roomCode}`, "📋");
+        showToast(`Room Code: ${state.roomCode}`, "📋");
       }
       document.body.removeChild(ta);
     };
 
+    let toastTimer = null;
     function showToast(text, icon = "✨") {
       const el = document.getElementById("toast");
       document.getElementById("toast-msg").textContent = text;
       document.getElementById("toast-icon").textContent = icon;
       el.classList.remove("opacity-0", "translate-y-3");
       el.classList.add("opacity-100", "translate-y-0");
-      setTimeout(() => {
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
         el.classList.add("opacity-0", "translate-y-3");
         el.classList.remove("opacity-100", "translate-y-0");
-      }, 2500);
+      }, 2800);
     }
 
     // =========================================================================
-    // LOBBY POOL RENDERING (SCATTERED REAL STUDENTS ONLY)
+    // LIVE CLASSROOM POOL & PARTNER CONNECTION WEB
     // =========================================================================
-    function renderLobbyPool() {
-      const pool = document.getElementById("lobby-pool");
+    function renderPoolAndStats() {
       const list = Object.values(state.students);
       document.getElementById("lobby-count").textContent = list.length;
 
+      // 1. Render Lobby Pool (Real Students Only)
+      const lobbyPool = document.getElementById("lobby-pool");
+      const emptyBanner = document.getElementById("lobby-empty-banner");
+      lobbyPool.querySelectorAll(".pool-avatar-node").forEach((n) => n.remove());
+
       if (list.length === 0) {
-        pool.innerHTML = `
-          <div id="lobby-empty-banner" class="bg-white/90 px-6 py-4 rounded-3xl border-2 border-sky-200 shadow-md text-center">
-            <div class="text-4xl mb-1">🎒</div>
-            <div class="font-bubbly text-xl font-bold text-slate-800">Waiting for class to join...</div>
+        emptyBanner.classList.remove("hidden");
+      } else {
+        emptyBanner.classList.add("hidden");
+        list.forEach((s, idx) => {
+          const node = document.createElement("div");
+          node.className = "pool-avatar-node flex flex-col items-center";
+          node.style.left = `${s.pos.x}%`;
+          node.style.top = `${s.pos.y}%`;
+          node.style.animationDelay = `${(idx * 0.3) % 2.4}s`;
+          node.innerHTML = `
+            <div class="w-15 h-15 sm:w-18 sm:h-18 rounded-3xl bg-white border-4 border-sky-300 shadow-lg flex items-center justify-center text-3xl sm:text-4xl">
+              ${s.avatar}
+            </div>
+            <span class="mt-1 px-3 py-0.5 rounded-full bg-slate-800 text-white font-bubbly font-bold text-xs shadow">
+              ${escapeHTML(s.name)}
+            </span>
+          `;
+          lobbyPool.appendChild(node);
+        });
+      }
+
+      // 2. Render Gameplay Pool + Glowing Web Lines
+      const gameAvatars = document.getElementById("game-pool-avatars");
+      const svg = document.getElementById("pool-tether-svg");
+      gameAvatars.innerHTML = "";
+      svg.innerHTML = "";
+
+      let soloCount = 0;
+      let duoCount = 0;
+      const drawnPairs = new Set();
+
+      list.forEach((s, idx) => {
+        const isDuo = s.choice === "DUO" && Boolean(s.partnerId);
+        if (isDuo) duoCount++;
+        else soloCount++;
+
+        const ringColor = isDuo ? "border-amber-400 bg-amber-50" : "border-sky-300 bg-white";
+        const tagBg = isDuo ? "bg-amber-500" : "bg-sky-500";
+        const tagIcon = isDuo ? "🤝" : "🧍";
+
+        const node = document.createElement("div");
+        node.className = "pool-avatar-node flex flex-col items-center";
+        node.style.left = `${s.pos.x}%`;
+        node.style.top = `${s.pos.y}%`;
+        node.style.animationDelay = `${(idx * 0.25) % 2.2}s`;
+        node.innerHTML = `
+          <div class="relative">
+            <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl ${ringColor} border-4 shadow-md flex items-center justify-center text-3xl sm:text-4xl transition-colors">
+              ${s.avatar}
+            </div>
+            <span class="absolute -top-2 -right-2 w-6 h-6 rounded-full ${tagBg} text-white text-xs flex items-center justify-center shadow border-2 border-white">
+              ${tagIcon}
+            </span>
           </div>
+          <span class="mt-1 px-2.5 py-0.5 rounded-full bg-slate-800 text-white font-bubbly font-bold text-[11px] shadow">
+            ${escapeHTML(s.name)}
+          </span>
         `;
+        gameAvatars.appendChild(node);
+
+        // Draw glowing web line between paired classmates
+        if (isDuo && state.students[s.partnerId]) {
+          const target = state.students[s.partnerId];
+          const pairKey = [s.id, target.id].sort().join("--");
+          if (!drawnPairs.has(pairKey)) {
+            drawnPairs.add(pairKey);
+
+            // Outer white glow
+            const glow = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            glow.setAttribute("x1", `${s.pos.x}%`);
+            glow.setAttribute("y1", `${s.pos.y}%`);
+            glow.setAttribute("x2", `${target.pos.x}%`);
+            glow.setAttribute("y2", `${target.pos.y}%`);
+            glow.setAttribute("stroke", "#ffffff");
+            glow.setAttribute("stroke-width", "11");
+            glow.setAttribute("stroke-linecap", "round");
+            svg.appendChild(glow);
+
+            // Inner animated amber tether
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute("x1", `${s.pos.x}%`);
+            line.setAttribute("y1", `${s.pos.y}%`);
+            line.setAttribute("x2", `${target.pos.x}%`);
+            line.setAttribute("y2", `${target.pos.y}%`);
+            line.setAttribute("stroke", "#f59e0b");
+            line.setAttribute("stroke-width", "6");
+            line.setAttribute("stroke-linecap", "round");
+            line.setAttribute("class", "tether-line");
+            svg.appendChild(line);
+
+            // Midpoint connection node dot
+            const midX = (s.pos.x + target.pos.x) / 2;
+            const midY = (s.pos.y + target.pos.y) / 2;
+            const nodeDot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            nodeDot.setAttribute("cx", `${midX}%`);
+            nodeDot.setAttribute("cy", `${midY}%`);
+            nodeDot.setAttribute("r", "7");
+            nodeDot.setAttribute("fill", "#f59e0b");
+            nodeDot.setAttribute("stroke", "#ffffff");
+            nodeDot.setAttribute("stroke-width", "3");
+            svg.appendChild(nodeDot);
+          }
+        }
+      });
+
+      document.getElementById("live-solo-count").textContent = soloCount;
+      document.getElementById("live-duo-count").textContent = duoCount;
+
+      renderLeaderboard();
+    }
+
+    function renderLeaderboard() {
+      const container = document.getElementById("leaderboard-list");
+      const sorted = Object.values(state.students).sort((a, b) => b.score - a.score);
+
+      if (sorted.length === 0) {
+        container.innerHTML = `<div class="text-center text-slate-400 font-bold text-sm py-6">Waiting for players...</div>`;
         return;
       }
 
-      pool.innerHTML = list.map((s, idx) => `
-        <div class="pool-avatar-node flex flex-col items-center" style="left: ${s.pos.x}%; top: ${s.pos.y}%; animation-delay: ${(idx * 0.25).toFixed(2)}s;">
-          <div class="animate-pop flex flex-col items-center">
-            <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-white border-4 border-sky-400 shadow-lg flex items-center justify-center text-4xl sm:text-5xl">
-              ${s.avatar}
+      container.innerHTML = sorted.map((s, idx) => {
+        const rankIcon = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`;
+        return `
+          <div class="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-2xl px-3 py-2">
+            <div class="flex items-center gap-2">
+              <span class="font-bubbly font-bold text-sm w-6 text-center">${rankIcon}</span>
+              <span class="text-2xl">${s.avatar}</span>
+              <span class="font-bubbly font-bold text-slate-800 text-sm">${escapeHTML(s.name)}</span>
             </div>
-            <span class="mt-1 px-3 py-0.5 rounded-full bg-slate-900 text-white font-bubbly font-bold text-xs sm:text-sm shadow">
-              ${escapeHTML(s.name)}
-            </span>
+            <div class="font-bubbly font-bold text-indigo-600 text-base">
+              ${s.score}
+            </div>
           </div>
-        </div>
-      `).join("");
+        `;
+      }).join("");
     }
 
     // =========================================================================
-    // ACTIVE 10-SECOND ROUND & LIVE PARTNER CONNECTION WEB
+    // GAME FLOW CONTROLS (10-SECOND ROUNDS)
     // =========================================================================
+    function showView(name) {
+      ["view-lobby", "view-gameplay", "view-finale"].forEach((id) => {
+        const el = document.getElementById(id);
+        el.classList.add("hidden");
+        el.classList.remove("flex");
+      });
+      const target = document.getElementById(`view-${name}`);
+      target.classList.remove("hidden");
+      if (name === "gameplay") target.classList.add("flex");
+    }
+
     window.startGame = function () {
       ensureAudio();
       state.roundIndex = 0;
-      document.getElementById("view-lobby").classList.add("hidden");
-      document.getElementById("view-finale").classList.add("hidden");
-      document.getElementById("view-gameplay").classList.remove("hidden");
-      document.getElementById("view-gameplay").classList.add("flex");
       beginRound();
     };
 
@@ -937,121 +1026,68 @@
 
       const roundObj = ROUNDS[state.roundIndex];
 
+      // Reset round selections in memory & cloud
       for (const s of Object.values(state.students)) {
         s.choice = "SOLO";
         s.partnerId = null;
         s.partnerName = null;
         s.timeLeft = 0;
-
         if (state.useCloud && cloudUser) {
           const pRef = doc(db, "artifacts", appId, "public", "data", `players_${state.roomCode}`, s.id);
-          await updateDoc(pRef, {
-            choice: "SOLO",
-            partnerId: null,
-            partnerName: null,
-            timeLeft: 0
-          }).catch(() => {});
+          updateDoc(pRef, { choice: "SOLO", partnerId: null, partnerName: null, timeLeft: 0 }).catch(() => {});
         }
       }
 
-      document.getElementById("game-emoji").textContent = roundObj.emoji;
+      showView("gameplay");
       document.getElementById("game-round-pill").textContent = `Round ${roundObj.round} / ${ROUNDS.length}`;
+      document.getElementById("game-emoji").textContent = roundObj.emoji;
       document.getElementById("game-situation").textContent = roundObj.situation;
 
       const timerNum = document.getElementById("game-timer-num");
-      const timerBox = document.getElementById("timer-ring-box");
-      timerNum.textContent = String(ROUND_DURATION);
-      timerBox.className = "relative w-20 h-20 rounded-full bg-indigo-50 border-4 border-indigo-500 flex items-center justify-center shadow-inner animate-urgent";
+      const timerRing = document.getElementById("timer-ring-box");
+      timerNum.textContent = ROUND_DURATION;
+      timerRing.className = "relative w-20 h-20 rounded-full bg-indigo-50 border-4 border-indigo-500 flex items-center justify-center shadow-inner";
+      timerNum.className = "font-bubbly text-4xl font-bold text-indigo-700 leading-none";
 
       document.getElementById("reveal-card").classList.add("hidden");
+      document.getElementById("btn-reveal").disabled = false;
       document.getElementById("btn-next-round").disabled = true;
 
-      renderGamePool();
-      renderLeaderboard();
+      renderPoolAndStats();
       playTone("join");
 
-      await syncCloudState({ roundStartedAt: Date.now() });
-      broadcast({
-        type: "START_ROUND",
-        roundIndex: state.roundIndex,
-        roundData: roundObj,
-        timer: ROUND_DURATION,
-        roster: getRosterList()
-      });
+      await syncRoomPhase();
+      const roster = Object.values(state.students).map((s) => ({
+        id: s.id,
+        name: s.name,
+        avatar: s.avatar,
+        choice: s.choice,
+        partnerId: s.partnerId,
+        partnerName: s.partnerName
+      }));
+      broadcastFallback({ type: "START_ROUND", roundData: roundObj, timer: ROUND_DURATION, roster });
 
       state.timerHandle = setInterval(async () => {
         state.timer--;
         if (state.timer > 0) {
           timerNum.textContent = state.timer;
+          if (state.timer <= 3) {
+            timerRing.className = "relative w-20 h-20 rounded-full bg-rose-50 border-4 border-rose-500 flex items-center justify-center shadow-inner animate-urgent";
+            timerNum.className = "font-bubbly text-4xl font-bold text-rose-600 leading-none";
+          }
           playTone("tick");
         } else {
           clearInterval(state.timerHandle);
           state.timer = 0;
+          state.phase = "timesup";
           timerNum.textContent = "0";
-          timerBox.className = "relative w-20 h-20 rounded-full bg-rose-100 border-4 border-rose-500 flex items-center justify-center shadow-inner";
+          timerRing.classList.remove("animate-urgent");
           playTone("alarm");
 
-          if (state.phase === "playing") {
-            state.phase = "timesup";
-            await syncCloudState();
-          }
-          broadcast({ type: "TIMES_UP" });
+          await syncRoomPhase();
+          broadcastFallback({ type: "TIMES_UP" });
         }
       }, 1000);
-    }
-
-    function renderGamePool() {
-      const avatarsLayer = document.getElementById("game-pool-avatars");
-      const svgLayer = document.getElementById("pool-tether-svg");
-      const list = Object.values(state.students);
-
-      let soloCount = 0;
-      let duoCount = 0;
-      let svgMarkup = "";
-
-      list.forEach((s) => {
-        if (s.choice === "DUO" && s.partnerId && state.students[s.partnerId]) {
-          duoCount++;
-          const partner = state.students[s.partnerId];
-          const midX = (s.pos.x + partner.pos.x) / 2;
-          const midY = (s.pos.y + partner.pos.y) / 2;
-
-          // Web connection lines + glowing midpoint link badge
-          svgMarkup += `
-            <line x1="${s.pos.x}%" y1="${s.pos.y}%" x2="${partner.pos.x}%" y2="${partner.pos.y}%"
-                  stroke="#ffffff" stroke-width="11" stroke-linecap="round" opacity="0.9" />
-            <line x1="${s.pos.x}%" y1="${s.pos.y}%" x2="${partner.pos.x}%" y2="${partner.pos.y}%"
-                  stroke="#f59e0b" stroke-width="5" stroke-linecap="round" class="tether-line" />
-            <circle cx="${midX}%" cy="${midY}%" r="8" fill="#f59e0b" stroke="#ffffff" stroke-width="3" />
-          `;
-        } else {
-          soloCount++;
-        }
-      });
-
-      document.getElementById("live-solo-count").textContent = soloCount;
-      document.getElementById("live-duo-count").textContent = duoCount;
-      svgLayer.innerHTML = svgMarkup;
-
-      avatarsLayer.innerHTML = list.map((s, idx) => {
-        const isDuo = s.choice === "DUO" && s.partnerName;
-        const ringClass = isDuo ? "border-amber-400 bg-amber-50 scale-105" : "border-sky-400 bg-white";
-        const badgeHTML = isDuo
-          ? `<span class="mb-1 px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-extrabold shadow border border-white whitespace-nowrap">🤝 ${escapeHTML(s.partnerName)}</span>`
-          : `<span class="mb-1 px-2 py-0.5 rounded-full bg-sky-500 text-white text-[10px] font-extrabold shadow border border-white">🧍 SOLO</span>`;
-
-        return `
-          <div class="pool-avatar-node flex flex-col items-center" style="left: ${s.pos.x}%; top: ${s.pos.y}%; animation-delay: ${(idx * 0.22).toFixed(2)}s;">
-            ${badgeHTML}
-            <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-3xl ${ringClass} border-4 shadow-md flex items-center justify-center text-3xl sm:text-4xl transition-transform duration-300">
-              ${s.avatar}
-            </div>
-            <span class="mt-1 px-2.5 py-0.5 rounded-full bg-slate-900 text-white font-bubbly font-bold text-xs shadow">
-              ${escapeHTML(s.name)}
-            </span>
-          </div>
-        `;
-      }).join("");
     }
 
     window.revealAnswer = async function () {
@@ -1059,96 +1095,67 @@
       clearInterval(state.timerHandle);
       state.phase = "revealed";
       playTone("fanfare");
-      launchConfetti(75);
+      launchConfetti(70);
 
       const roundObj = ROUNDS[state.roundIndex];
       const outcomes = {};
 
-      for (const s of Object.values(state.students)) {
-        const chosen = s.choice === "DUO" ? "DUO" : "SOLO";
-        const correct = chosen === roundObj.answer;
-        const gained = correct ? (100 + Math.round((s.timeLeft || 0) * 10)) : 0;
-        s.score += gained;
-
+      // Score students (+100 base + up to +50 speed bonus)
+      Object.values(state.students).forEach((s) => {
+        const chosen = s.choice === "DUO" && s.partnerId ? "DUO" : "SOLO";
+        const isCorrect = chosen === roundObj.answer;
+        let gained = 0;
+        if (isCorrect) {
+          gained = 100 + Math.round(((s.timeLeft || 0) / ROUND_DURATION) * 50);
+          s.score += gained;
+        }
         outcomes[s.id] = {
           chosen,
-          partnerName: s.partnerName,
-          correct,
+          correct: isCorrect,
           gained,
           totalScore: s.score
         };
-      }
-
-      const sorted = Object.values(state.students).sort((a, b) => b.score - a.score);
-      sorted.forEach((s, i) => {
-        if (outcomes[s.id]) outcomes[s.id].rank = i + 1;
       });
 
-      if (state.useCloud && cloudUser) {
-        for (const s of sorted) {
-          const out = outcomes[s.id];
+      const sorted = Object.values(state.students).sort((a, b) => b.score - a.score);
+      sorted.forEach((s, idx) => {
+        if (outcomes[s.id]) outcomes[s.id].rank = idx + 1;
+        if (state.useCloud && cloudUser) {
           const pRef = doc(db, "artifacts", appId, "public", "data", `players_${state.roomCode}`, s.id);
-          await updateDoc(pRef, {
+          updateDoc(pRef, {
             score: s.score,
-            lastGained: out.gained,
-            lastCorrect: out.correct,
-            rank: out.rank
+            lastCorrect: outcomes[s.id].correct,
+            lastGained: outcomes[s.id].gained,
+            rank: idx + 1
           }).catch(() => {});
         }
-        await syncCloudState();
-      }
+      });
 
-      const revealCard = document.getElementById("reveal-card");
-      const badge = document.getElementById("reveal-answer-badge");
-      revealCard.classList.remove("hidden");
+      // Reveal Card UI
+      const revCard = document.getElementById("reveal-card");
+      const revBadge = document.getElementById("reveal-answer-badge");
+      revCard.classList.remove("hidden");
 
       if (roundObj.answer === "SOLO") {
-        revealCard.className = "mt-4 rounded-2xl p-4 border-2 border-sky-300 bg-sky-50 animate-pop";
-        badge.className = "inline-block px-3.5 py-1 rounded-full font-bubbly font-bold text-base text-white bg-sky-500 mb-2 shadow-xs";
-        badge.textContent = "🧍 SOLO!";
+        revCard.className = "mt-4 rounded-2xl p-4 border-2 border-sky-300 bg-sky-50 animate-pop";
+        revBadge.className = "inline-block px-3.5 py-1 rounded-full font-bubbly font-bold text-base text-white bg-sky-500 mb-2 shadow-xs";
+        revBadge.textContent = "🧍 SOLO";
       } else {
-        revealCard.className = "mt-4 rounded-2xl p-4 border-2 border-amber-300 bg-amber-50 animate-pop";
-        badge.className = "inline-block px-3.5 py-1 rounded-full font-bubbly font-bold text-base text-white bg-amber-500 mb-2 shadow-xs";
-        badge.textContent = "🤝 DUO!";
+        revCard.className = "mt-4 rounded-2xl p-4 border-2 border-amber-300 bg-amber-50 animate-pop";
+        revBadge.className = "inline-block px-3.5 py-1 rounded-full font-bubbly font-bold text-base text-white bg-amber-500 mb-2 shadow-xs";
+        revBadge.textContent = "🤝 DUO";
       }
 
       document.getElementById("reveal-clue-text").textContent = roundObj.clue;
+      document.getElementById("btn-reveal").disabled = true;
       document.getElementById("btn-next-round").disabled = false;
       document.getElementById("btn-next-text").textContent =
-        state.roundIndex === ROUNDS.length - 1 ? "Final Board" : "Next Round";
+        state.roundIndex === ROUNDS.length - 1 ? "Finish" : "Next Round";
 
       renderLeaderboard();
-
-      broadcast({
-        type: "REVEAL",
-        roundData: roundObj,
-        outcomes
-      });
+      await syncRoomPhase();
+      broadcastFallback({ type: "REVEAL", roundData: roundObj, outcomes });
     };
-
-    function renderLeaderboard() {
-      const el = document.getElementById("leaderboard-list");
-      const sorted = Object.values(state.students).sort((a, b) => b.score - a.score);
-
-      if (sorted.length === 0) {
-        el.innerHTML = `<div class="text-center text-slate-400 font-bold text-sm py-6">No players yet</div>`;
-        return;
-      }
-
-      el.innerHTML = sorted.map((s, idx) => {
-        const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`;
-        return `
-          <div class="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-2xl px-3.5 py-2">
-            <div class="flex items-center gap-2.5">
-              <span class="font-bubbly font-bold text-base w-6 text-center">${medal}</span>
-              <span class="text-2xl">${s.avatar}</span>
-              <span class="font-bubbly font-bold text-slate-800 text-sm">${escapeHTML(s.name)}</span>
-            </div>
-            <span class="font-bubbly font-bold text-indigo-700 text-base">${s.score}</span>
-          </div>
-        `;
-      }).join("");
-    }
 
     window.nextRound = function () {
       if (state.roundIndex < ROUNDS.length - 1) {
@@ -1159,54 +1166,50 @@
       }
     };
 
-    // =========================================================================
-    // FINALE PODIUM & PATTERN BOARD
-    // =========================================================================
     async function showFinale() {
       state.phase = "finale";
       playTone("fanfare");
       launchConfetti(120);
-
-      document.getElementById("view-gameplay").classList.add("hidden");
-      document.getElementById("view-gameplay").classList.remove("flex");
-      document.getElementById("view-finale").classList.remove("hidden");
+      showView("finale");
 
       const sorted = Object.values(state.students).sort((a, b) => b.score - a.score);
       const podium = document.getElementById("finale-podium");
 
-      podium.innerHTML = sorted.slice(0, 3).map((s, i) => {
-        const title = i === 0 ? "🥇 1st" : i === 1 ? "🥈 2nd" : "🥉 3rd";
-        const bg = i === 0 ? "bg-amber-100 border-amber-400 scale-105" : "bg-slate-50 border-slate-200";
-        return `
-          <div class="rounded-3xl border-3 ${bg} px-6 py-4 text-center shadow-md min-w-[140px]">
-            <div class="text-xs font-extrabold uppercase tracking-wider text-slate-600 mb-1">${title}</div>
-            <div class="text-5xl mb-1">${s.avatar}</div>
-            <div class="font-bubbly font-bold text-lg text-slate-800">${escapeHTML(s.name)}</div>
-            <div class="font-bubbly font-bold text-indigo-600 text-base">${s.score} pts</div>
-          </div>
-        `;
-      }).join("");
+      if (sorted.length === 0) {
+        podium.innerHTML = "";
+      } else {
+        podium.innerHTML = sorted.slice(0, 3).map((s, i) => {
+          const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉";
+          const style = i === 0 ? "bg-amber-100 border-amber-400 scale-105" : "bg-slate-50 border-slate-200";
+          return `
+            <div class="rounded-3xl border-3 ${style} px-5 py-3 text-center shadow-md min-w-[130px]">
+              <div class="text-2xl mb-0.5">${medal}</div>
+              <div class="text-4xl mb-1">${s.avatar}</div>
+              <div class="font-bubbly font-bold text-slate-800 text-base">${escapeHTML(s.name)}</div>
+              <div class="font-bubbly font-bold text-indigo-600 text-sm">${s.score} pts</div>
+            </div>
+          `;
+        }).join("");
+      }
 
-      const soloList = document.getElementById("finale-solo-list");
-      const duoList = document.getElementById("finale-duo-list");
-      soloList.innerHTML = "";
-      duoList.innerHTML = "";
+      const soloUl = document.getElementById("finale-solo-list");
+      const duoUl = document.getElementById("finale-duo-list");
+      soloUl.innerHTML = "";
+      duoUl.innerHTML = "";
 
       ROUNDS.forEach((r) => {
         const li = document.createElement("li");
-        li.className = "flex items-center gap-2.5 bg-white px-3.5 py-2 rounded-2xl border border-slate-100 shadow-2xs";
+        li.className = "flex items-center gap-2.5 bg-white px-3.5 py-2 rounded-2xl shadow-2xs";
         li.innerHTML = `<span class="text-xl">${r.emoji}</span><span>${r.summary}</span>`;
-        if (r.answer === "SOLO") soloList.appendChild(li);
-        else duoList.appendChild(li);
+        if (r.answer === "SOLO") soloUl.appendChild(li);
+        else duoUl.appendChild(li);
       });
 
       const standings = {};
-      sorted.forEach((s, idx) => {
-        standings[s.id] = { rank: idx + 1, score: s.score };
-      });
+      sorted.forEach((s, idx) => { standings[s.id] = { rank: idx + 1, score: s.score }; });
 
-      await syncCloudState();
-      broadcast({ type: "GAME_OVER", standings });
+      await syncRoomPhase();
+      broadcastFallback({ type: "GAME_OVER", standings });
     }
 
     window.resetGameToLobby = async function () {
@@ -1219,22 +1222,13 @@
         s.partnerName = null;
         if (state.useCloud && cloudUser) {
           const pRef = doc(db, "artifacts", appId, "public", "data", `players_${state.roomCode}`, s.id);
-          await updateDoc(pRef, {
-            score: 0,
-            choice: "SOLO",
-            partnerId: null,
-            partnerName: null,
-            rank: 1
-          }).catch(() => {});
+          updateDoc(pRef, { score: 0, choice: "SOLO", partnerId: null, partnerName: null }).catch(() => {});
         }
       }
-
-      document.getElementById("view-finale").classList.add("hidden");
-      document.getElementById("view-lobby").classList.remove("hidden");
-      renderLobbyPool();
-      renderLeaderboard();
-      await syncCloudState();
-      broadcast({ type: "RETURN_LOBBY" });
+      showView("lobby");
+      renderPoolAndStats();
+      await syncRoomPhase();
+      broadcastFallback({ type: "RETURN_LOBBY" });
     };
 
     function escapeHTML(str) {
@@ -1244,7 +1238,7 @@
     }
 
     let confettiAnim = null;
-    function launchConfetti(count = 80) {
+    function launchConfetti(count = 75) {
       const canvas = document.getElementById("confetti-canvas");
       const ctx = canvas.getContext("2d");
       canvas.width = window.innerWidth;
@@ -1253,7 +1247,7 @@
       const palette = ["#38bdf8", "#facc15", "#4ade80", "#f472b6", "#a855f7", "#fb7185"];
       const bits = Array.from({ length: count }, () => ({
         x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height * 0.35 - canvas.height * 0.25,
+        y: Math.random() * canvas.height * 0.4 - canvas.height * 0.3,
         size: Math.random() * 10 + 6,
         color: palette[Math.floor(Math.random() * palette.length)],
         vx: Math.random() * 4 - 2,
@@ -1274,11 +1268,11 @@
           ctx.translate(b.x, b.y);
           ctx.rotate((b.angle * Math.PI) / 180);
           ctx.fillStyle = b.color;
-          ctx.globalAlpha = Math.max(0, 1 - frame / 135);
+          ctx.globalAlpha = Math.max(0, 1 - frame / 140);
           ctx.fillRect(-b.size / 2, -b.size / 2, b.size, b.size * 0.65);
           ctx.restore();
         });
-        if (frame < 135) confettiAnim = requestAnimationFrame(draw);
+        if (frame < 140) confettiAnim = requestAnimationFrame(draw);
         else ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
       cancelAnimationFrame(confettiAnim);
