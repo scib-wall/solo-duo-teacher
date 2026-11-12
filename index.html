@@ -634,14 +634,24 @@
               }
             }
 
-            // Clear stale partner tethers or mismatched 1-way links
+            // Resolve asymmetric / stale links cleanly without dropping active pairs
             for (const s of Object.values(state.students)) {
               if (s.partnerId) {
                 const partner = state.students[s.partnerId];
-                if (!partner || (partner.partnerId && partner.partnerId !== s.id)) {
+                if (!partner) {
                   s.choice = "SOLO";
                   s.partnerId = null;
                   s.partnerName = null;
+                } else if (partner.partnerId && partner.partnerId !== s.id) {
+                  // Partner moved on to someone else
+                  s.choice = "SOLO";
+                  s.partnerId = null;
+                  s.partnerName = null;
+                } else if (!partner.partnerId) {
+                  // Mirror the link onto B immediately so teacher web always draws A—B
+                  partner.choice = "DUO";
+                  partner.partnerId = s.id;
+                  partner.partnerName = s.name;
                 }
               }
             }
@@ -756,11 +766,18 @@
         if (!st || state.phase !== "playing") return;
 
         // Release old partner if switching or unpairing
-        if (st.partnerId && st.partnerId !== msg.partnerId && state.students[st.partnerId]) {
-          const oldP = state.students[st.partnerId];
+        const oldPartnerId = st.partnerId;
+        if (oldPartnerId && oldPartnerId !== msg.partnerId && state.students[oldPartnerId]) {
+          const oldP = state.students[oldPartnerId];
           oldP.choice = "SOLO";
           oldP.partnerId = null;
           oldP.partnerName = null;
+          broadcastFallback({
+            type: "PARTNER_CHANGED",
+            targetId: oldP.id,
+            partnerId: null,
+            partnerName: null
+          });
         }
 
         st.choice = msg.choice;
@@ -776,11 +793,23 @@
             displaced.choice = "SOLO";
             displaced.partnerId = null;
             displaced.partnerName = null;
+            broadcastFallback({
+              type: "PARTNER_CHANGED",
+              targetId: displaced.id,
+              partnerId: null,
+              partnerName: null
+            });
           }
           newP.choice = "DUO";
           newP.partnerId = st.id;
           newP.partnerName = st.name;
           newP.timeLeft = msg.timeLeft || 0;
+          broadcastFallback({
+            type: "PARTNER_CHANGED",
+            targetId: newP.id,
+            partnerId: st.id,
+            partnerName: st.name
+          });
         }
 
         if (msg.choice === "DUO") playTone("pair");
