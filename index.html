@@ -792,13 +792,56 @@
         const stu = state.students[msg.studentId];
         if (!stu || state.phase !== "playing") return;
 
+        // Release old partner if student switched or unpaired
+        if (msg.prevPartnerId && state.students[msg.prevPartnerId] && msg.prevPartnerId !== msg.partnerId) {
+          const oldP = state.students[msg.prevPartnerId];
+          oldP.choice = "SOLO";
+          oldP.partnerId = null;
+          oldP.partnerName = null;
+          notifyStudentPartnerChange(oldP.id, null, null);
+        }
+
         stu.choice = msg.choice;
         stu.partnerId = msg.partnerId || null;
         stu.partnerName = msg.partnerName || null;
         stu.timeLeft = typeof msg.timeLeft === "number" ? msg.timeLeft : state.timer;
 
+        // Two-way pair: also link the chosen partner back to this student
+        if (stu.choice === "DUO" && stu.partnerId && state.students[stu.partnerId]) {
+          const target = state.students[stu.partnerId];
+          if (target.partnerId && target.partnerId !== stu.id && state.students[target.partnerId]) {
+            const displaced = state.students[target.partnerId];
+            displaced.choice = "SOLO";
+            displaced.partnerId = null;
+            displaced.partnerName = null;
+            notifyStudentPartnerChange(displaced.id, null, null);
+          }
+          target.choice = "DUO";
+          target.partnerId = stu.id;
+          target.partnerName = stu.name;
+          target.timeLeft = stu.timeLeft;
+          notifyStudentPartnerChange(target.id, stu.id, stu.name);
+        }
+
         if (stu.choice === "DUO") playTone("pair");
         renderGamePool();
+      }
+    }
+
+    function notifyStudentPartnerChange(targetStudentId, partnerId, partnerName) {
+      const payload = {
+        type: "PARTNER_CHANGED",
+        targetStudentId,
+        partnerId,
+        partnerName
+      };
+      Object.values(state.connections).forEach((conn) => {
+        if (conn && conn.open && conn._studentId === targetStudentId) {
+          try { conn.send(payload); } catch (e) {}
+        }
+      });
+      if (state.bc) {
+        try { state.bc.postMessage(payload); } catch (e) {}
       }
     }
 
