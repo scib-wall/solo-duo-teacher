@@ -608,6 +608,8 @@
             snapshot.forEach((docSnap) => {
               const data = docSnap.data();
               if (!data || data.online === false) return;
+              // Skip mobile clients whose heartbeat stopped (>12s)
+              if (data.lastSeen && Date.now() - data.lastSeen > 12000) return;
               activeIds.add(docSnap.id);
 
               const existing = state.students[docSnap.id];
