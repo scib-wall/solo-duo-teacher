@@ -422,14 +422,14 @@
         summary: "Bee pollinating two apple trees (2 trees → seeds)"
       }
     ];
-
-    // Organic scattered coordinates across the classroom pool
+    // 40 compact scattered coordinates across the classroom pool for 35+ students
     const POOL_POSITIONS = [
-      { x: 14, y: 26 }, { x: 34, y: 22 }, { x: 54, y: 27 }, { x: 74, y: 21 }, { x: 89, y: 31 },
-      { x: 11, y: 53 }, { x: 28, y: 49 }, { x: 49, y: 55 }, { x: 69, y: 48 }, { x: 87, y: 57 },
-      { x: 16, y: 78 }, { x: 36, y: 74 }, { x: 56, y: 80 }, { x: 75, y: 73 }, { x: 88, y: 81 },
-      { x: 22, y: 37 }, { x: 42, y: 39 }, { x: 62, y: 36 }, { x: 80, y: 41 }, { x: 44, y: 67 },
-      { x: 24, y: 65 }, { x: 65, y: 64 }, { x: 19, y: 17 }, { x: 63, y: 16 }, { x: 83, y: 16 }
+      { x: 10, y: 22 }, { x: 23, y: 20 }, { x: 36, y: 22 }, { x: 50, y: 19 }, { x: 64, y: 22 }, { x: 77, y: 20 }, { x: 90, y: 22 },
+      { x: 9,  y: 35 }, { x: 21, y: 33 }, { x: 34, y: 35 }, { x: 47, y: 32 }, { x: 60, y: 35 }, { x: 73, y: 33 }, { x: 86, y: 35 },
+      { x: 11, y: 48 }, { x: 24, y: 46 }, { x: 37, y: 49 }, { x: 50, y: 46 }, { x: 63, y: 49 }, { x: 76, y: 46 }, { x: 89, y: 48 },
+      { x: 9,  y: 61 }, { x: 22, y: 59 }, { x: 35, y: 62 }, { x: 48, y: 59 }, { x: 61, y: 62 }, { x: 74, y: 59 }, { x: 87, y: 61 },
+      { x: 11, y: 74 }, { x: 24, y: 72 }, { x: 37, y: 75 }, { x: 50, y: 72 }, { x: 63, y: 75 }, { x: 76, y: 72 }, { x: 89, y: 74 },
+      { x: 16, y: 85 }, { x: 32, y: 84 }, { x: 50, y: 85 }, { x: 68, y: 84 }, { x: 84, y: 85 }
     ];
 
     let state = {
@@ -918,6 +918,11 @@
       gameAvatars.innerHTML = "";
       svg.innerHTML = "";
 
+      const isLargeClass = list.length > 18;
+      const avatarBoxCls = isLargeClass
+        ? "w-11 h-11 sm:w-12 sm:h-12 text-2xl sm:text-3xl"
+        : "w-14 h-14 sm:w-16 sm:h-16 text-3xl sm:text-4xl";
+
       let soloCount = 0;
       let duoCount = 0;
       const drawnPairs = new Set();
@@ -938,14 +943,14 @@
         node.style.animationDelay = `${(idx * 0.25) % 2.2}s`;
         node.innerHTML = `
           <div class="relative">
-            <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl ${ringColor} border-4 shadow-md flex items-center justify-center text-3xl sm:text-4xl transition-colors">
+            <div class="${avatarBoxCls} rounded-2xl ${ringColor} border-3 shadow-md flex items-center justify-center transition-colors">
               ${s.avatar}
             </div>
-            <span class="absolute -top-2 -right-2 w-6 h-6 rounded-full ${tagBg} text-white text-xs flex items-center justify-center shadow border-2 border-white">
+            <span class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full ${tagBg} text-white text-[10px] flex items-center justify-center shadow border border-white">
               ${tagIcon}
             </span>
           </div>
-          <span class="mt-1 px-2.5 py-0.5 rounded-full bg-slate-800 text-white font-bubbly font-bold text-[11px] shadow">
+          <span class="mt-0.5 px-2 py-0.5 rounded-full bg-slate-800 text-white font-bubbly font-bold text-[10px] shadow max-w-[76px] truncate">
             ${escapeHTML(s.name)}
           </span>
         `;
