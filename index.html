@@ -575,6 +575,15 @@
       initFallbackHostRoom();
     });
 
+    // Notify all connected students to reset when the teacher reloads or closes the tab
+    window.addEventListener("beforeunload", () => {
+      if (state.useCloud && cloudUser && state.roomCode) {
+        const roomRef = doc(db, "artifacts", appId, "public", "data", `room_${state.roomCode}`, "state");
+        updateDoc(roomRef, { phase: "closed", updatedAt: Date.now() }).catch(() => {});
+      }
+      broadcastFallback({ type: "HOST_RESET" });
+    });
+
     async function initCloudRoom() {
       if (!cloudUser) return;
 
